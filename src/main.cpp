@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <M5StickCPlus.h>
 #include "NetworkModule.h"
 #include "WebSocketsModule.h"
@@ -36,7 +37,8 @@ void setup () {
     uint8_t macAddress[6];
     WiFi.macAddress(macAddress);
     sprintf(deviceId, "%02X%02X%02X", macAddress[3], macAddress[4], macAddress[5]);
-    strcpy(deviceName, "M5StickC-Plus-");
+    const char* prefix = "M5StickC-Plus-";
+    strcpy(deviceName, prefix);
     strcat(deviceName, deviceId);
     
     changeScreen(0);

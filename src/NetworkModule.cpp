@@ -70,7 +70,8 @@ void WiFi_setup () {
         Serial.println("UTC Time: " + UTC.dateTime(ISO8601));
         Serial.println("Local Time: " + localTime.dateTime(ISO8601));
         char buff[65];
-        strcpy(buff, "Local Time: ");
+        const char* prefix = "Local Time: ";
+        strcpy(buff, prefix);
         strcat(buff, localTime.dateTime(ISO8601).c_str());
         if (currentScreen == 0) startupLog(buff, 1);
     } else {
@@ -120,7 +121,8 @@ void WiFi_onEvent(WiFiEvent_t event) {
           updateNTP();
           if (currentScreen == 0) {
             char buff[65];
-            strcpy(buff, "Obtained IP address: ");
+            const char* prefix = "Obtained IP address: ";
+            strcpy(buff, prefix);
             strcat(buff, WiFi.localIP().toString().c_str());
             startupLog(buff, 1);
           }

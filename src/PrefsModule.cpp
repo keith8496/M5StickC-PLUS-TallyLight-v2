@@ -31,13 +31,18 @@ int pmPowerSaverBright;
 void preferences_setup() {
     
     preferences.begin("custom", true);
-    strcpy(friendlyName, preferences.getString("friendlyName", "CamX").c_str());
+    const char* defaultFriendlyName = "CamX";
+    strcpy(friendlyName, preferences.getString("friendlyName", defaultFriendlyName).c_str());
     //if (preferences.getBytesLength("inputIds") > 0) preferences.getBytes("inputIds", &inputIds, 2);
-    strcpy(nodeRED_ServerIP, preferences.getString("nr_ServerIP", "192.168.13.54").c_str());
+    const char* defaultServerIP = "192.168.13.54";
+    strcpy(nodeRED_ServerIP, preferences.getString("nr_ServerIP", defaultServerIP).c_str());
     nodeRED_ServerPort = preferences.getInt("nr_ServerPort", 1880);
-    strcpy(nodeRED_ServerUrl, preferences.getString("nr_ServerUrl", "/ws/tally").c_str());
-    strcpy(localTimeZone, preferences.getString("localTimeZone", "America/Chicago").c_str());
-    strcpy(ntpServer, preferences.getString("ntpServer", "time.apple.com").c_str());
+    const char* defaultServerUrl = "/ws/tally";
+    strcpy(nodeRED_ServerUrl, preferences.getString("nr_ServerUrl", defaultServerUrl).c_str());
+    const char* defaultTimeZone = "America/Chicago";
+    strcpy(localTimeZone, preferences.getString("localTimeZone", defaultTimeZone).c_str());
+    const char* defaultNtpServer = "time.apple.com";
+    strcpy(ntpServer, preferences.getString("ntpServer", defaultNtpServer).c_str());
     batteryCapacity = preferences.getInt("batteryCapacity", 2200);
     pmPowerSaverBatt = preferences.getInt("pmPowerSaverBatt", 25);
     pmPowerSaverBright = preferences.getInt("pmPowerSaverBright", 30);
