@@ -22,7 +22,7 @@ millisDelay md_sendStatus;
 void webSockets_setup();
 void webSockets_onLoop();
 void webSockets_onEvent(WStype_t type, uint8_t* payload, size_t length);
-void webSockets_onTally(DynamicJsonDocument doc);
+void webSockets_onTally(JsonDocument doc);
 void webSockets_getTally();
 
 
@@ -34,7 +34,7 @@ void webSockets_onLoop() {
         
         //char buff[17];
         //ultoa(inputIds, buff, 2);
-        StaticJsonDocument<512> doc;
+        JsonDocument doc;
         
         doc["deviceId"] = deviceId;
         doc["MessageType"] = "DeviceStatus";
@@ -104,7 +104,7 @@ void webSockets_onEvent(WStype_t type, uint8_t* payload, size_t length) {
             
         case WStype_TEXT: {
         
-            DynamicJsonDocument doc(length);
+            JsonDocument doc;
             DeserializationError error = deserializeJson(doc, payload, length);
 
             if (error.code() != DeserializationError::Ok) {
@@ -155,7 +155,7 @@ void webSockets_onEvent(WStype_t type, uint8_t* payload, size_t length) {
 }
 
 
-void webSockets_onTally(DynamicJsonDocument doc) {
+void webSockets_onTally(JsonDocument doc) {
 
     /*
     Serial.println(F("webSockets_onTally()"));
@@ -178,7 +178,11 @@ void webSockets_onTally(DynamicJsonDocument doc) {
         atem_pgm1_input_id = EventValue;
         //Serial.println(F("webSockets_onTally() EventValue Success"));
         const char* tmp_atem_pgm1_friendlyName = doc["MessageData"]["atem_pgm1_friendlyName"];
-        strcpy(atem_pgm1_friendlyName, tmp_atem_pgm1_friendlyName);
+        if (tmp_atem_pgm1_friendlyName) {
+            strcpy(atem_pgm1_friendlyName, tmp_atem_pgm1_friendlyName);
+        } else {
+            atem_pgm1_friendlyName[0] = '\0';
+        }
     } else if (strcmp(EventType, "atem_pvw1_input_id") == 0) {
         //Serial.println(F("webSockets_onTally() atem_pvw1_input_id"));
         //Serial.println(F("webSockets_onTally() EventValue"));
@@ -186,7 +190,11 @@ void webSockets_onTally(DynamicJsonDocument doc) {
         atem_pvw1_input_id = EventValue;
         //Serial.println(F("webSockets_onTally() EventValue Success"));
         const char* tmp_str_atem_pvw1_friendlyName = doc["MessageData"]["atem_pvw1_friendlyName"];
-        strcpy(atem_pvw1_friendlyName, tmp_str_atem_pvw1_friendlyName);
+        if (tmp_str_atem_pvw1_friendlyName) {
+            strcpy(atem_pvw1_friendlyName, tmp_str_atem_pvw1_friendlyName);
+        } else {
+            atem_pvw1_friendlyName[0] = '\0';
+        }
     }
 
     /*
@@ -212,7 +220,7 @@ void webSockets_getTally() {
 
 void webSockets_returnTally(int tallyIndicator) {
         
-        StaticJsonDocument<128> doc;
+        JsonDocument doc;
         
         doc["deviceId"] = deviceId;
         doc["MessageType"] = "ReturnTally";

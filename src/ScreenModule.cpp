@@ -246,13 +246,14 @@ void setBrightness(int newBrightness) {
 }
 
 
-void startupLog(char in_logMessage[65], int in_textSize) {
+void startupLog(const char* in_logMessage, int in_textSize) {
     index_startupLog++;
     if (index_startupLog > 19) {
         Serial.println(F("Too many log entries."));
         return;
     }
-    strcpy(startupLogEntries[index_startupLog].logMessage, in_logMessage);
+    strncpy(startupLogEntries[index_startupLog].logMessage, in_logMessage, 64);
+    startupLogEntries[index_startupLog].logMessage[64] = '\0';
     startupLogEntries[index_startupLog].textSize = in_textSize;
     refreshStartupScreen();
 }
