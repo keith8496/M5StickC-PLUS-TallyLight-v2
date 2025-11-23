@@ -1,0 +1,25 @@
+[
+    {
+        "id": "41c2af27b62ed6b3",
+        "type": "sqlite",
+        "z": "8c835d3399ba65c8",
+        "g": "a21cc27a7c64a43b",
+        "mydb": "f3b2cb2dfae64c41",
+        "sqlquery": "fixed",
+        "sql": "SELECT deviceid,\n       Datetime(timestamp, 'localtime') AS timestamp,\n       friendlyName,\n       batVoltage,\n       batpercentage,\n       batPercentageCoulomb,\n       coulombCount,\n       batcurrent,\n       maxchargecurrent,\n       tempinaxp192,\n       powermode,\n       currentbrightness,\n       currentscreen,\n       webportalactive,\n       ntp,\n       ssid,\n       rssi,\n       ip,\n       hostname\nFROM   devicestatuslog T1\nWHERE  1 = 1\n       AND EXISTS (SELECT 1\n                   FROM   devicestatuslog T2\n                   WHERE  T1.deviceid = T2.deviceid\n                          AND T2.timestamp >= Datetime('now', '-2 minutes')\n                   GROUP  BY T2.deviceid\n                   HAVING T1.timestamp = Max(t2.timestamp))  ",
+        "name": "Select Recent",
+        "x": 1160,
+        "y": 100,
+        "wires": [
+            [
+                "bedaf31a71749f5c"
+            ]
+        ]
+    },
+    {
+        "id": "f3b2cb2dfae64c41",
+        "type": "sqlitedb",
+        "db": "/data/sqlite",
+        "mode": "RWC"
+    }
+]
