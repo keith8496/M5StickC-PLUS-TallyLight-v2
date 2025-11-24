@@ -20,9 +20,6 @@ millisDelay ms_startup;
 #endif
 
 
-char deviceId[17];
-char deviceName[33];
-
 void setup () {
 
     M5.begin();
@@ -57,7 +54,7 @@ void setup () {
         WiFi_onLoop();
         webSockets_onLoop();
         power_onLoop();
-        if (ws_isConnected & (timeStatus() == timeSet)) {
+        if (ws_isConnected && (timeStatus() == timeSet)) {
             ms_startup.stop();
             startupLog("Startup complete.", 1);
         }

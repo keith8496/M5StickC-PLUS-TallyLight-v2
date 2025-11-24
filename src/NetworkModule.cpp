@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <M5StickCPlus.h>
 #include <WiFiManager.h>
 #include <millisDelay.h>
@@ -70,9 +71,7 @@ void WiFi_setup () {
         Serial.println("UTC Time: " + UTC.dateTime(ISO8601));
         Serial.println("Local Time: " + localTime.dateTime(ISO8601));
         char buff[65];
-        const char* prefix = "Local Time: ";
-        strcpy(buff, prefix);
-        strcat(buff, localTime.dateTime(ISO8601).c_str());
+        snprintf(buff, sizeof(buff), "Local Time: %s", localTime.dateTime(ISO8601).c_str());
         if (currentScreen == 0) startupLog(buff, 1);
     } else {
         if (currentScreen == 0) startupLog("ezTime initialization failed...", 1);
@@ -121,9 +120,7 @@ void WiFi_onEvent(WiFiEvent_t event) {
           updateNTP();
           if (currentScreen == 0) {
             char buff[65];
-            const char* prefix = "Obtained IP address: ";
-            strcpy(buff, prefix);
-            strcat(buff, WiFi.localIP().toString().c_str());
+            snprintf(buff, sizeof(buff), "Obtained IP address: %s", WiFi.localIP().toString().c_str());
             startupLog(buff, 1);
           }
           break;
