@@ -1,15 +1,16 @@
 
+#include "ScreenModule.h"
+#include "millisDelay.h"
 #include <M5StickCPlus.h>
 #include "PrefsModule.h"
 #include "WebSocketsModule.h"
-#include "NetworkModule.h"
 #include "PowerModule.h"
-#include "millisDelay.h"
+#include "NetworkModule.h"
 
 millisDelay md_screenRefresh;
 
-const int maxScreen = 3;
-int currentScreen = 0;          // 0-Startup, 1-Tally, 2-Power, 3-Setup
+ScreenId currentScreen = SCREEN_STARTUP;
+const int maxScreen = SCREEN_SETUP;
 int currentBrightness = 11;     // default 11, max 12
 
 const int tft_width = 240;
@@ -20,8 +21,9 @@ TFT_eSprite tallyScreen = TFT_eSprite(&M5.Lcd);
 TFT_eSprite powerScreen = TFT_eSprite(&M5.Lcd);
 TFT_eSprite setupScreen = TFT_eSprite(&M5.Lcd);
 
+constexpr size_t LOG_MESSAGE_MAX_LEN     = 64;
 struct startupLogData {
-    char logMessage[65];
+    char logMessage[LOG_MESSAGE_MAX_LEN + 1];
     int textSize;
 };
 
@@ -35,21 +37,12 @@ void refreshTallyScreen() {
 
     bool isProgram = false;
     bool isPreview = false;
-    
-    /*
-    // Bitshift on inputIds. Rightmost bit = input 1
-    for (int i = 1; i <= 16; i++) {
-        bool bitValue = (inputIds >> i-1) & 0x01;
-        if ((bitValue) & (i == atem_pgm1_input_id)) isProgram = true;
-        if ((bitValue) & (i == atem_pvw1_input_id)) isPreview = true;
-    }
-    */
 
    if (strcmp(friendlyName, atem_pgm1_friendlyName) == 0) isProgram = true;
    if (strcmp(friendlyName, atem_pvw1_friendlyName) == 0) isPreview = true;
 
     if (isProgram) {
-        tallyScreen.fillRect(0,0,240,135, TFT_RED);\
+        tallyScreen.fillRect(0,0,240,135, TFT_RED);
         if (prevTally != 2) {prevTally = 2; webSockets_returnTally(2);}
     } else if (isPreview) {
         tallyScreen.fillRect(0,0,240,135, TFT_GREEN);
@@ -69,7 +62,9 @@ void refreshTallyScreen() {
     tallyScreen.setTextSize(2);
     tallyScreen.setCursor((tft_width/2)-20, 8);
     tallyScreen.setTextColor(TFT_WHITE, TFT_BLACK);
-    tallyScreen.print(localTime.dateTime("g:i:s A"));
+    auto now = localTime.dateTime("g:i:s A");
+    tallyScreen.print(now ? now : "--:--:--");
+
     
     // Friendly Name
     tallyScreen.setTextSize(9);
@@ -108,7 +103,7 @@ void refreshPowerScreen() {
 void refreshSetupScreen() {
 
     String strTimeStatus;
-    strTimeStatus.reserve(14);
+    strTimeStatus.reserve(16);
     switch (timeStatus()) {
         case (timeNotSet):
             strTimeStatus= "timeNotSet";
@@ -155,17 +150,17 @@ void refreshStartupScreen() {
 }
 
 
-void changeScreen(int newScreen = -1) {
+void changeScreen(int newScreen) {
 
     Serial.println(F("changeScreen()"));
     if (newScreen < -1 || newScreen > maxScreen) {
         Serial.println(F("changeScreen() error: \"invalid screen number rejected\""));
         return;
     } else if (newScreen == -1) {
-        if (currentScreen == maxScreen) currentScreen = 0;  // reset
-        currentScreen++;
+        if (currentScreen == maxScreen) currentScreen = SCREEN_STARTUP;  // reset
+        currentScreen = static_cast<ScreenId>((static_cast<int>(currentScreen) + 1) % (maxScreen + 1));
     } else {
-        currentScreen = newScreen;
+        currentScreen = static_cast<ScreenId>(newScreen);
     }
 
     if (wm.getWebPortalActive()) wm.stopWebPortal();
@@ -181,23 +176,23 @@ void changeScreen(int newScreen = -1) {
     M5.Lcd.setCursor(0,0);
 
     switch (currentScreen) {
-        case 0:
+        case SCREEN_STARTUP:
             // startupScreen
             startupScreen.createSprite(tft_width-5, tft_heigth-5);
             startupScreen.setRotation(3);
             break;
-        case 1:
+        case SCREEN_TALLY:
             // tallyScreen
             tallyScreen.createSprite(tft_width, tft_heigth);
             tallyScreen.setRotation(3);
             webSockets_getTally();
             break;
-        case 2:
+        case SCREEN_POWER:
             // powerScreen
             powerScreen.createSprite(tft_width, tft_heigth);
             powerScreen.setRotation(3);
             break;
-        case 3:
+        case SCREEN_SETUP:
             // setupScreen
             if (!wm.getWebPortalActive()) wm.startWebPortal();
             setupScreen.createSprite(tft_width, tft_heigth);
@@ -208,7 +203,7 @@ void changeScreen(int newScreen = -1) {
             break; 
     }
 
-    md_screenRefresh.start(33.33333); // 30 fps
+    md_screenRefresh.start(1000 / 30); // 30 fps
 
 }
 
@@ -220,16 +215,16 @@ void refreshScreen() {
     md_screenRefresh.repeat();
     
     switch (currentScreen) {
-        case 0:
+        case SCREEN_STARTUP:
             refreshStartupScreen();
             break;
-        case 1:
+        case SCREEN_TALLY:
             refreshTallyScreen();
             break;
-        case 2:
+        case SCREEN_POWER:
             refreshPowerScreen();
             break;
-        case 3:
+        case SCREEN_SETUP:
             refreshSetupScreen();
             break;
         default:
@@ -246,13 +241,14 @@ void setBrightness(int newBrightness) {
 }
 
 
-void startupLog(char in_logMessage[65], int in_textSize) {
+void startupLog(const char* in_logMessage, int in_textSize) {
     index_startupLog++;
     if (index_startupLog > 19) {
         Serial.println(F("Too many log entries."));
         return;
     }
-    strcpy(startupLogEntries[index_startupLog].logMessage, in_logMessage);
+    strncpy(startupLogEntries[index_startupLog].logMessage, in_logMessage, 64);
+    startupLogEntries[index_startupLog].logMessage[64] = '\0';
     startupLogEntries[index_startupLog].textSize = in_textSize;
     refreshStartupScreen();
 }
