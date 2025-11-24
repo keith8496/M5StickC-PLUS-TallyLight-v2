@@ -1,11 +1,12 @@
-#include "PrefsModule.h"
 #include <WiFiManager.h>
 #include <Preferences.h>
+#include "ConfigState.h"
+#include "PrefsModule.h"
 #include "NetworkModule.h"
 #include "WebSocketsModule.h"
 
+
 WiFiManagerParameter wm_friendlyName("friendlyName", "Friendly Name");
-//WiFiManagerParameter wm_inputIds("inputIds", "Input IDs (0000000000000001)");
 WiFiManagerParameter wm_nodeRED_ServerIP("nr_ServerIP", "Node-RED Server IP");
 WiFiManagerParameter wm_nodeRED_ServerPort("nr_ServerPort", "Node-RED Server Port");
 WiFiManagerParameter wm_nodeRED_ServerUrl("nr_ServerUrl", "Node-RED Server URL");
@@ -15,6 +16,12 @@ WiFiManagerParameter wm_batteryCapacity("batteryCapacity", "Battery Capacity (mA
 WiFiManagerParameter wm_pmPowerSaverBatt("pmPowerSaverBatt", "Power Saver Battery Level");
 WiFiManagerParameter wm_pmPowerSaverBright("pmPowerSaverBright", "Power Saver Screen Brightness");
 
+WiFiManagerParameter wm_mqtt_server("mqtt_server", "MQTT Server IP/Host");
+WiFiManagerParameter wm_mqtt_port("mqtt_port", "MQTT Server Port");
+WiFiManagerParameter wm_mqtt_username("mqtt_username", "MQTT Username");
+WiFiManagerParameter wm_mqtt_password("mqtt_password", "MQTT Password");
+
+
 Preferences preferences;
 char deviceId[DEVICE_ID_MAX_LEN + 1];
 char deviceName[DEVICE_NAME_MAX_LEN + 1];
@@ -23,36 +30,38 @@ char nodeRED_ServerIP[IP_STR_MAX_LEN + 1];
 char nodeRED_ServerUrl[URL_MAX_LEN + 1];
 char localTimeZone[TIMEZONE_MAX_LEN + 1];
 char ntpServer[NTP_SERVER_MAX_LEN + 1];
-//uint16_t inputIds = 0b0000000000000001;
 int nodeRED_ServerPort;
 int batteryCapacity;
 int pmPowerSaverBatt;
 int pmPowerSaverBright;
 
+char mqtt_server[32];
+int mqtt_port;
+char mqtt_username[32];
+char mqtt_password[32];
 
 void preferences_setup() {
     
     preferences.begin("custom", true);
-    const char* defaultFriendlyName = "CamX";
-    snprintf(friendlyName, sizeof(friendlyName), "%s", preferences.getString("friendlyName", defaultFriendlyName).c_str());
-    //if (preferences.getBytesLength("inputIds") > 0) preferences.getBytes("inputIds", &inputIds, 2);
-    const char* defaultServerIP = "192.168.13.54";
-    snprintf(nodeRED_ServerIP, sizeof(nodeRED_ServerIP), "%s", preferences.getString("nr_ServerIP", defaultServerIP).c_str());
+    snprintf(friendlyName, sizeof(friendlyName), "%s", preferences.getString("friendlyName", "CamX").c_str());
+    snprintf(nodeRED_ServerIP, sizeof(nodeRED_ServerIP), "%s", preferences.getString("nr_ServerIP", "172.16.30.54").c_str());
     nodeRED_ServerPort = preferences.getInt("nr_ServerPort", 1880);
-    const char* defaultServerUrl = "/ws/tally";
-    snprintf(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl), "%s", preferences.getString("nr_ServerUrl", defaultServerUrl).c_str());
-    const char* defaultTimeZone = "America/Chicago";
-    snprintf(localTimeZone, sizeof(localTimeZone), "%s", preferences.getString("localTimeZone", defaultTimeZone).c_str());
-    const char* defaultNtpServer = "time.apple.com";
-    snprintf(ntpServer, sizeof(ntpServer), "%s", preferences.getString("ntpServer", defaultNtpServer).c_str());
+    snprintf(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl), "%s", preferences.getString("nr_ServerUrl", "/ws/tally").c_str());
+    snprintf(localTimeZone, sizeof(localTimeZone), "%s", preferences.getString("localTimeZone", "America/Chicago").c_str());
+    snprintf(ntpServer, sizeof(ntpServer), "%s", preferences.getString("ntpServer", "time.apple.com").c_str());
     batteryCapacity = preferences.getInt("batteryCapacity", 2200);
     pmPowerSaverBatt = preferences.getInt("pmPowerSaverBatt", 25);
     pmPowerSaverBright = preferences.getInt("pmPowerSaverBright", 30);
+    
+    snprintf(mqtt_server, sizeof(mqtt_server), "%s", preferences.getString("mqtt_server", "172.16.30.11").c_str());
+    mqtt_port = preferences.getInt("mqtt_port", 1883);
+    snprintf(mqtt_username, sizeof(mqtt_username), "%s", preferences.getString("mqtt_username", "").c_str());
+    snprintf(mqtt_password, sizeof(mqtt_password), "%s", preferences.getString("mqtt_password", "").c_str()); // move me soon!
+    
     preferences.end();
 
     // wm_addParameters
     wm.addParameter(&wm_friendlyName);
-    //wm.addParameter(&wm_inputIds);
     wm.addParameter(&wm_nodeRED_ServerIP);
     wm.addParameter(&wm_nodeRED_ServerPort);
     wm.addParameter(&wm_nodeRED_ServerUrl);
@@ -61,6 +70,10 @@ void preferences_setup() {
     wm.addParameter(&wm_batteryCapacity);
     wm.addParameter(&wm_pmPowerSaverBatt);
     wm.addParameter(&wm_pmPowerSaverBright);
+    wm.addParameter(&wm_mqtt_server);
+    wm.addParameter(&wm_mqtt_port);
+    wm.addParameter(&wm_mqtt_username);
+    wm.addParameter(&wm_mqtt_password);
     
     // set wm values
     constexpr size_t BUFF_MAX_LEN   = 32;
@@ -81,13 +94,18 @@ void preferences_setup() {
     itoa(pmPowerSaverBright, buff, 10);
     wm_pmPowerSaverBright.setValue(buff, sizeof(buff));
 
+    wm_mqtt_server.setValue(mqtt_server, sizeof(mqtt_server));
+    itoa(mqtt_port, buff, 10);
+    wm_mqtt_port.setValue(buff, sizeof(buff));
+    wm_mqtt_username.setValue(mqtt_username, sizeof(mqtt_username));
+    wm_mqtt_password.setValue(mqtt_password, sizeof(mqtt_password));
+
 }
 
 
 void preferences_save() {
     preferences.begin("custom", false);
     preferences.putString("friendlyName", friendlyName);
-    //preferences.putBytes("inputIds", &inputIds, 2);
     preferences.putString("nr_ServerIP", nodeRED_ServerIP);
     preferences.putInt("nr_ServerPort", nodeRED_ServerPort);
     preferences.putString("nr_ServerUrl", nodeRED_ServerUrl);
@@ -96,6 +114,11 @@ void preferences_save() {
     preferences.putInt("batteryCapacity", batteryCapacity);
     preferences.putInt("pmPowerSaverBatt", pmPowerSaverBatt);
     preferences.putInt("pmPowerSaverBright", pmPowerSaverBright);
+    preferences.putString("mqtt_server", mqtt_server);
+    preferences.putInt("mqtt_port", mqtt_port);
+    preferences.putString("mqtt_username", mqtt_username);
+    preferences.putString("mqtt_password", mqtt_password);
+
     preferences.end();
 }
 
@@ -103,7 +126,6 @@ void preferences_save() {
 void WiFi_onSaveParams() {
 
     snprintf(friendlyName, sizeof(friendlyName), "%s", wm_friendlyName.getValue());
-    //inputIds = static_cast<uint16_t>(strtol(wm_inputIds.getValue(), NULL, 2));
     snprintf(nodeRED_ServerIP, sizeof(nodeRED_ServerIP), "%s", wm_nodeRED_ServerIP.getValue());
     nodeRED_ServerPort = atoi(wm_nodeRED_ServerPort.getValue());
     snprintf(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl), "%s", wm_nodeRED_ServerUrl.getValue());
@@ -113,7 +135,45 @@ void WiFi_onSaveParams() {
     pmPowerSaverBatt = atoi(wm_pmPowerSaverBatt.getValue());
     pmPowerSaverBright = atoi(wm_pmPowerSaverBright.getValue());
 
+    snprintf(mqtt_server, sizeof(mqtt_server), "%s", wm_mqtt_server.getValue());
+    mqtt_port = atoi(wm_mqtt_port.getValue());
+    snprintf(mqtt_username, sizeof(mqtt_username), "%s", wm_mqtt_username.getValue());
+    snprintf(mqtt_password, sizeof(mqtt_password), "%s", wm_mqtt_password.getValue());
+
     preferences_save();
     webSockets_getTally();
 
+}
+
+
+// Bridge: copy values loaded by preferences_setup() into ConfigState
+void prefs_applyToConfig(ConfigState& cfg) {
+    // Per-device config
+    cfg.device.deviceId            = String(deviceId);
+    cfg.device.friendlyName        = String(friendlyName);
+    cfg.device.batteryCapacityMah  = static_cast<uint16_t>(batteryCapacity);
+
+    // Global power-saver config (from WiFi portal / prefs)
+    cfg.global.powersaverBatteryPct = static_cast<uint8_t>(pmPowerSaverBatt);
+
+    // pmPowerSaverBright is currently 0–100; map to a 0–10-ish brightness scale
+    int bright = pmPowerSaverBright / 10;       // e.g. 30 → 3
+    if (bright < 0)  bright = 0;
+    if (bright > 10) bright = 10;
+    cfg.global.powersaverBrightness = static_cast<uint8_t>(bright);
+
+    // NTP + timezone
+    cfg.global.ntpServer = String(ntpServer);
+    cfg.global.timezone  = String(localTimeZone);
+
+    // MQTT server defaults:
+    cfg.global.mqttServer = String(mqtt_server);
+    cfg.global.mqttPort   = mqtt_port;  // Mosquitto default
+    cfg.global.mqttUsername = String(mqtt_username);
+    cfg.global.mqttPassword = String(mqtt_password);
+
+    // Optional: set a default normal brightness if you like
+    if (cfg.global.brightness == 0) {
+        cfg.global.brightness = 5;
+    }
 }

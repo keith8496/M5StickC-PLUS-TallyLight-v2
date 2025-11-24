@@ -1,13 +1,19 @@
 #include <Arduino.h>
+
 #include <M5StickCPlus.h>
-#include "millisDelay.h"
+#include <millisDelay.h>
+#include <WiFi.h>
+
 #include "ScreenModule.h"
 #include "NetworkModule.h"
 #include "PrefsModule.h"
 #include "PowerModule.h"
 #include "WebSocketsModule.h"
 
-millisDelay ms_startup;
+#include "ConfigState.h"
+#include "TallyState.h"
+#include "MqttClient.h"
+#include "MqttRouter.h"
 
 #define TPS false
 #if TPS
@@ -19,9 +25,45 @@ millisDelay ms_startup;
     RunningAverage ra_TPS(samples);
 #endif
 
+millisDelay ms_startup;
+
+// Global state
+ConfigState g_config;
+TallyState  g_tally;
+MqttClient  g_mqtt(g_config, g_tally);
+
+uint32_t g_bootMillis;
+
+MqttCommand g_pendingCommand;  // global or static
+
+// Example status snapshot builder
+StatusSnapshot buildStatusSnapshot() {
+    StatusSnapshot st;
+    st.uptimeSec = (millis() - g_bootMillis) / 1000;
+    float batPct = pwr.batPercentage;
+    if (batPct < 0.0f) batPct = 0.0f;
+    else if (batPct > 100.0f) batPct = 100.0f;
+    st.batteryPct = static_cast<uint8_t>(batPct + 0.5f);
+    st.batteryMv  = static_cast<uint16_t>(pwr.batVoltage * 1000.0f);
+    st.rssi       = static_cast<int8_t>(WiFi.RSSI());
+    st.temperatureC = pwr.tempInAXP192;
+    st.firmwareVersion = F("2.0.0-mqtt");
+    st.hwRevision      = F("M5StickC-Plus");
+    return st;
+}
+
+void onMqttMessage(const String& topic, const String& payload) {
+    // Route into ConfigState + TallyState, and capture any command
+    handleMqttMessage(g_config, g_tally, topic, payload, g_pendingCommand);
+
+    // Optional debug
+    Serial.printf("[MQTT] %s => %s\n", topic.c_str(), payload.c_str());
+}
+
 
 void setup () {
 
+    Serial.begin(115200);
     M5.begin();
     M5.Lcd.setRotation(3);
     setCpuFrequencyMhz(80); //Save battery by turning down the CPU clock
@@ -72,6 +114,19 @@ void setup () {
         ms_runningAvg.start(60000);
     #endif
 
+    // Begin New MQTT Stuff
+    g_bootMillis = millis();
+
+    // Bridge those values into ConfigState
+    // We already called preferences_setup() earlier,
+    // so the global buffers are populated. Just bridge now:
+    prefs_applyToConfig(g_config);
+
+    // Init MQTT wrapper
+    g_mqtt.setMessageHandler(onMqttMessage);
+    g_mqtt.begin();
+    // End New MQTT Stuff
+
 }
 
 void loop () {
@@ -81,6 +136,59 @@ void loop () {
     WiFi_onLoop();
     webSockets_onLoop();
     power_onLoop();
+
+    // Begin New MQTT Stuff
+    g_mqtt.loop();
+
+    // Periodic status publish
+    static uint32_t lastStatusMs = 0;
+    const auto eff = g_config.effective();
+    uint32_t now = millis();
+    if (now - lastStatusMs > (uint32_t)eff.statusIntervalSec * 1000UL) {
+        lastStatusMs = now;
+        g_mqtt.publishStatus(buildStatusSnapshot());
+    }
+
+    // Handle pending command (deep sleep/reboot/etc.)
+    if (g_pendingCommand.type != MqttCommandType::None) {
+        MqttCommandType cmd = g_pendingCommand.type;
+        g_pendingCommand.type = MqttCommandType::None;  // consume it
+
+        switch (cmd) {
+            case MqttCommandType::DeepSleep:
+                // TODO: publish offline, flush, then enter deep sleep
+                // e.g. g_mqtt.publishAvailability("offline"); delay(50); esp_deep_sleep_start();
+                Serial.println("Would DeepSleep (ignoring for now)");
+                break;
+
+            case MqttCommandType::Reboot:
+                // TODO: publish offline, flush, then restart
+                // ESP.restart();
+                Serial.println("Would Reboot (ignoring for now)");
+                break;
+
+            case MqttCommandType::Wakeup:
+                // Typically handled by hardware; you may ignore in firmware
+                Serial.println("Would Wakeup (ignoring for now)");
+                break;
+
+            case MqttCommandType::OtaUpdate:
+                // Reserved for future; for now maybe log and ignore
+                // g_mqtt.publishLog("OTA command received (not implemented yet)", LogLevel::Warn);
+                Serial.println("Would OtaUpdate (ignoring for now)");
+                break;
+
+            case MqttCommandType::FactoryReset:
+                // Future: clear NVS prefs, reboot, etc.
+                Serial.println("Would FactoryReset (ignoring for now)");
+                break;
+
+            case MqttCommandType::None:
+            default:
+                break;
+        }
+    }
+    // End New MQTT Stuff
 
     // M5 Button
     if (M5.BtnA.wasReleased()) {
