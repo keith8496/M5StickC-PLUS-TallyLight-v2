@@ -159,10 +159,10 @@ void doPowerManagement() {
   const bool isBatWarningLevel = M5.Axp.GetWarningLevel();
     if (isBatWarningLevel) {
       const char* warning = "LOW BATTERY";
-      strcpy(pwr.batWarningLevel, warning);
+      snprintf(pwr.batWarningLevel, sizeof(pwr.batWarningLevel), "%s", warning);
     } else {
       const char* warning = "";
-      strcpy(pwr.batWarningLevel, warning);
+      snprintf(pwr.batWarningLevel, sizeof(pwr.batWarningLevel), "%s", warning);
     }
   
   pwr.batVoltage = M5.Axp.GetBatVoltage();
@@ -213,7 +213,7 @@ void doPowerManagement() {
     if (currentBrightness > 20) {
 
       const char* mode = "5v Charge";
-      strcpy(pwr.powerMode, mode);
+      snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       md_chargeToOff.stop();
 
     } else {
@@ -233,10 +233,10 @@ void doPowerManagement() {
         char powerMode[20];
         const int md_chargeToOffRemaining = floor(md_chargeToOff.remaining() / 1000);
         snprintf(powerMode, 20, "Charge to Off (%i)", md_chargeToOffRemaining);
-        strcpy(pwr.powerMode, powerMode);
+        snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", powerMode);
       } else {
         const char* mode = "Charge to Off";
-        strcpy(pwr.powerMode, mode);
+        snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       }
 
     }
@@ -245,7 +245,7 @@ void doPowerManagement() {
 
     md_chargeToOff.stop();
     const char* mode = "USB Charge";
-    strcpy(pwr.powerMode, mode);
+    snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
     pwr.maxBrightness = 100;
     
     if (pwr.maxChargeCurrent != 100) {
@@ -261,7 +261,7 @@ void doPowerManagement() {
 
     if (isBatWarningLevel) {
       const char* mode = "Low Battery";
-      strcpy(pwr.powerMode, mode);
+      snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       pwr.maxBrightness = pmPowerSaverBright;
       if (md_lowBattery.justFinished()) {
         md_lowBattery.repeat();
@@ -272,12 +272,12 @@ void doPowerManagement() {
       }
     } else if (floor(pwr.batPercentageMin) <= pmPowerSaverBatt) {
       const char* mode = "Power Saver";
-      strcpy(pwr.powerMode, mode);
+      snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       pwr.maxBrightness = pmPowerSaverBright;
       if (currentBrightness > pwr.maxBrightness) setBrightness(pwr.maxBrightness);
     } else {
       const char* mode = "Balanced";
-      strcpy(pwr.powerMode, mode);
+      snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       pwr.maxBrightness = 100;
     }
 

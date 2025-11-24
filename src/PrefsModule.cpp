@@ -1,8 +1,8 @@
-#include <Preferences.h>
-#include <WiFiManager.h>
+#include "PrefsModule.h"
 #include "NetworkModule.h"
 #include "WebSocketsModule.h"
-
+#include <Preferences.h>
+#include <WiFiManager.h>
 
 WiFiManagerParameter wm_friendlyName("friendlyName", "Friendly Name");
 //WiFiManagerParameter wm_inputIds("inputIds", "Input IDs (0000000000000001)");
@@ -16,13 +16,15 @@ WiFiManagerParameter wm_pmPowerSaverBatt("pmPowerSaverBatt", "Power Saver Batter
 WiFiManagerParameter wm_pmPowerSaverBright("pmPowerSaverBright", "Power Saver Screen Brightness");
 
 Preferences preferences;
-char friendlyName[17];
+char deviceId[DEVICE_ID_MAX_LEN + 1];
+char deviceName[DEVICE_NAME_MAX_LEN + 1];
+char friendlyName[FRIENDLY_NAME_MAX_LEN + 1];
+char nodeRED_ServerIP[IP_STR_MAX_LEN + 1];
+char nodeRED_ServerUrl[URL_MAX_LEN + 1];
+char localTimeZone[TIMEZONE_MAX_LEN + 1];
+char ntpServer[NTP_SERVER_MAX_LEN + 1];
 //uint16_t inputIds = 0b0000000000000001;
-char nodeRED_ServerIP[16];
 int nodeRED_ServerPort;
-char nodeRED_ServerUrl[33];
-char localTimeZone[17];
-char ntpServer[33];
 int batteryCapacity;
 int pmPowerSaverBatt;
 int pmPowerSaverBright;
@@ -32,17 +34,17 @@ void preferences_setup() {
     
     preferences.begin("custom", true);
     const char* defaultFriendlyName = "CamX";
-    strcpy(friendlyName, preferences.getString("friendlyName", defaultFriendlyName).c_str());
+    snprintf(friendlyName, sizeof(friendlyName), "%s", preferences.getString("friendlyName", defaultFriendlyName).c_str());
     //if (preferences.getBytesLength("inputIds") > 0) preferences.getBytes("inputIds", &inputIds, 2);
     const char* defaultServerIP = "192.168.13.54";
-    strcpy(nodeRED_ServerIP, preferences.getString("nr_ServerIP", defaultServerIP).c_str());
+    snprintf(nodeRED_ServerIP, sizeof(nodeRED_ServerIP), "%s", preferences.getString("nr_ServerIP", defaultServerIP).c_str());
     nodeRED_ServerPort = preferences.getInt("nr_ServerPort", 1880);
     const char* defaultServerUrl = "/ws/tally";
-    strcpy(nodeRED_ServerUrl, preferences.getString("nr_ServerUrl", defaultServerUrl).c_str());
+    snprintf(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl), "%s", preferences.getString("nr_ServerUrl", defaultServerUrl).c_str());
     const char* defaultTimeZone = "America/Chicago";
-    strcpy(localTimeZone, preferences.getString("localTimeZone", defaultTimeZone).c_str());
+    snprintf(localTimeZone, sizeof(localTimeZone), "%s", preferences.getString("localTimeZone", defaultTimeZone).c_str());
     const char* defaultNtpServer = "time.apple.com";
-    strcpy(ntpServer, preferences.getString("ntpServer", defaultNtpServer).c_str());
+    snprintf(ntpServer, sizeof(ntpServer), "%s", preferences.getString("ntpServer", defaultNtpServer).c_str());
     batteryCapacity = preferences.getInt("batteryCapacity", 2200);
     pmPowerSaverBatt = preferences.getInt("pmPowerSaverBatt", 25);
     pmPowerSaverBright = preferences.getInt("pmPowerSaverBright", 30);
@@ -99,13 +101,13 @@ void preferences_save() {
 
 void WiFi_onSaveParams() {
 
-    strcpy(friendlyName, wm_friendlyName.getValue());
+    snprintf(friendlyName, sizeof(friendlyName), "%s", wm_friendlyName.getValue());
     //inputIds = static_cast<uint16_t>(strtol(wm_inputIds.getValue(), NULL, 2));
-    strcpy(nodeRED_ServerIP, wm_nodeRED_ServerIP.getValue());
+    snprintf(nodeRED_ServerIP, sizeof(nodeRED_ServerIP), "%s", wm_nodeRED_ServerIP.getValue());
     nodeRED_ServerPort = atoi(wm_nodeRED_ServerPort.getValue());
-    strcpy(nodeRED_ServerUrl, wm_nodeRED_ServerUrl.getValue());
-    strcpy(ntpServer, wm_ntpServer.getValue());
-    strcpy(localTimeZone, wm_localTimeZone.getValue());
+    snprintf(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl), "%s", wm_nodeRED_ServerUrl.getValue());
+    snprintf(ntpServer, sizeof(ntpServer), "%s", wm_ntpServer.getValue());
+    snprintf(localTimeZone, sizeof(localTimeZone), "%s", wm_localTimeZone.getValue());
     batteryCapacity = atoi(wm_batteryCapacity.getValue());
     pmPowerSaverBatt = atoi(wm_pmPowerSaverBatt.getValue());
     pmPowerSaverBright = atoi(wm_pmPowerSaverBright.getValue());
