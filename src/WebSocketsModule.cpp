@@ -28,7 +28,7 @@ void webSockets_getTally();
 
 void webSockets_onLoop() {
 
-    if (md_sendStatus.justFinished()) {
+    if (ws_isConnected && md_sendStatus.justFinished()) {
         
         md_sendStatus.repeat();
         
@@ -98,7 +98,7 @@ void webSockets_onEvent(WStype_t type, uint8_t* payload, size_t length) {
         case WStype_CONNECTED:
             ws_isConnected = true;
             Serial.println(F("Websockets connected."));
-            if (currentScreen == 0) startupLog("Websockets connected.", 1);
+            if (currentScreen == SCREEN_STARTUP) startupLog("Websockets connected.", 1);
             webSockets_getTally();
             md_sendStatus.start(60000);
             break;
@@ -179,7 +179,8 @@ void webSockets_onTally(JsonDocument doc) {
         //Serial.println(F("webSockets_onTally() EventValue Success"));
         const char* tmp_atem_pgm1_friendlyName = doc["MessageData"]["atem_pgm1_friendlyName"];
         if (tmp_atem_pgm1_friendlyName) {
-            strcpy(atem_pgm1_friendlyName, tmp_atem_pgm1_friendlyName);
+            strncpy(atem_pgm1_friendlyName, tmp_atem_pgm1_friendlyName, sizeof(atem_pgm1_friendlyName) - 1);
+            atem_pgm1_friendlyName[sizeof(atem_pgm1_friendlyName) - 1] = '\0';
         } else {
             atem_pgm1_friendlyName[0] = '\0';
         }
@@ -191,7 +192,8 @@ void webSockets_onTally(JsonDocument doc) {
         //Serial.println(F("webSockets_onTally() EventValue Success"));
         const char* tmp_str_atem_pvw1_friendlyName = doc["MessageData"]["atem_pvw1_friendlyName"];
         if (tmp_str_atem_pvw1_friendlyName) {
-            strcpy(atem_pvw1_friendlyName, tmp_str_atem_pvw1_friendlyName);
+            strncpy(atem_pvw1_friendlyName, tmp_str_atem_pvw1_friendlyName, sizeof(atem_pvw1_friendlyName) - 1);
+            atem_pvw1_friendlyName[sizeof(atem_pvw1_friendlyName) - 1] = '\0';
         } else {
             atem_pvw1_friendlyName[0] = '\0';
         }
