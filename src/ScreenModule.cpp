@@ -1,10 +1,11 @@
 
+#include "ScreenModule.h"
+#include "millisDelay.h"
 #include <M5StickCPlus.h>
 #include "PrefsModule.h"
 #include "WebSocketsModule.h"
-#include "NetworkModule.h"
 #include "PowerModule.h"
-#include "millisDelay.h"
+#include "NetworkModule.h"
 
 millisDelay md_screenRefresh;
 
@@ -20,8 +21,9 @@ TFT_eSprite tallyScreen = TFT_eSprite(&M5.Lcd);
 TFT_eSprite powerScreen = TFT_eSprite(&M5.Lcd);
 TFT_eSprite setupScreen = TFT_eSprite(&M5.Lcd);
 
+constexpr size_t LOG_MESSAGE_MAX_LEN     = 64;
 struct startupLogData {
-    char logMessage[65];
+    char logMessage[LOG_MESSAGE_MAX_LEN + 1];
     int textSize;
 };
 
@@ -155,7 +157,7 @@ void refreshStartupScreen() {
 }
 
 
-void changeScreen(int newScreen = -1) {
+void changeScreen(int newScreen) {
 
     Serial.println(F("changeScreen()"));
     if (newScreen < -1 || newScreen > maxScreen) {

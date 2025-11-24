@@ -1,9 +1,9 @@
-#include <M5StickCPlus.h>
+#include "PowerModule.h"
 #include <millisDelay.h>
 #include "RunningAverage.h"
-#include "PowerModule.h"
-#include "ScreenModule.h"
 #include "PrefsModule.h"
+#include <M5StickCPlus.h>
+#include "ScreenModule.h"
 
 
 power pwr;
@@ -230,7 +230,8 @@ void doPowerManagement() {
       }
       
       if (md_chargeToOff.isRunning()) {
-        char powerMode[20];
+        constexpr size_t POWER_MODE_MAX_LEN   = 20;
+        char powerMode[POWER_MODE_MAX_LEN];
         const int md_chargeToOffRemaining = floor(md_chargeToOff.remaining() / 1000);
         snprintf(powerMode, 20, "Charge to Off (%i)", md_chargeToOffRemaining);
         snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", powerMode);

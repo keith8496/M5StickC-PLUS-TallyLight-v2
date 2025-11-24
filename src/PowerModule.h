@@ -1,12 +1,17 @@
+#pragma once
+#include <Arduino.h>
+
+constexpr size_t BAT_WARNING_LEVEL_MAX_LEN   = 16;
+constexpr size_t POWER_MODE_MAX_LEN   = 16;
+
 struct power {
-    char batWarningLevel[17] = "";
-    char powerMode[17] = "";
+    char batWarningLevel[BAT_WARNING_LEVEL_MAX_LEN + 1] = "";
+    char powerMode[POWER_MODE_MAX_LEN + 1] = "";
     float coulombCount = 0;
     float batVoltage = 0;
     float batPercentage = 0;
     float batPercentageMin = 0;
     float batPercentageMax = 0;
-    //float batPercentageCoulomb = 0;
     float batCurrent = 0;
     float batChargeCurrent = 0;
     float vbusVoltage = 0;

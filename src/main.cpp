@@ -1,17 +1,17 @@
 #include <Arduino.h>
 #include <M5StickCPlus.h>
+#include "millisDelay.h"
+#include "ScreenModule.h"
 #include "NetworkModule.h"
-#include "WebSocketsModule.h"
 #include "PrefsModule.h"
 #include "PowerModule.h"
-#include "ScreenModule.h"
-#include "millisDelay.h"
-#include "RunningAverage.h"
+#include "WebSocketsModule.h"
 
 millisDelay ms_startup;
 
 #define TPS false
 #if TPS
+    #include "RunningAverage.h"
     millisDelay ms_runningAvg;
     millisDelay ms_tps;
     int ticks = 0;

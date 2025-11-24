@@ -1,8 +1,8 @@
 #include "PrefsModule.h"
+#include <WiFiManager.h>
+#include <Preferences.h>
 #include "NetworkModule.h"
 #include "WebSocketsModule.h"
-#include <Preferences.h>
-#include <WiFiManager.h>
 
 WiFiManagerParameter wm_friendlyName("friendlyName", "Friendly Name");
 //WiFiManagerParameter wm_inputIds("inputIds", "Input IDs (0000000000000001)");
@@ -63,7 +63,8 @@ void preferences_setup() {
     wm.addParameter(&wm_pmPowerSaverBright);
     
     // set wm values
-    char buff[33];
+    constexpr size_t BUFF_MAX_LEN   = 32;
+    char buff[BUFF_MAX_LEN + 1];
     wm_friendlyName.setValue(friendlyName, sizeof(friendlyName));
     //ultoa(inputIds, buff, 2);
     //wm_inputIds.setValue(buff, sizeof(buff));
