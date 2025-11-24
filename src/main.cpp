@@ -33,10 +33,10 @@ void setup () {
     // Set deviceId and deviceName
     uint8_t macAddress[6];
     WiFi.macAddress(macAddress);
-    sprintf(deviceId, "%02X%02X%02X", macAddress[3], macAddress[4], macAddress[5]);
-    const char* prefix = "M5StickC-Plus-";
-    strcpy(deviceName, prefix);
-    strcat(deviceName, deviceId);
+    snprintf(deviceId, sizeof(deviceId),
+         "%02X%02X%02X", macAddress[3], macAddress[4], macAddress[5]);
+    snprintf(deviceName, sizeof(deviceName),
+         "M5StickC-Plus-%s", deviceId);
     
     changeScreen(0);
     startupLog("Starting...", 1);

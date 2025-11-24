@@ -37,15 +37,6 @@ void refreshTallyScreen() {
 
     bool isProgram = false;
     bool isPreview = false;
-    
-    /*
-    // Bitshift on inputIds. Rightmost bit = input 1
-    for (int i = 1; i <= 16; i++) {
-        bool bitValue = (inputIds >> i-1) & 0x01;
-        if ((bitValue) & (i == atem_pgm1_input_id)) isProgram = true;
-        if ((bitValue) & (i == atem_pvw1_input_id)) isPreview = true;
-    }
-    */
 
    if (strcmp(friendlyName, atem_pgm1_friendlyName) == 0) isProgram = true;
    if (strcmp(friendlyName, atem_pvw1_friendlyName) == 0) isPreview = true;
@@ -112,7 +103,7 @@ void refreshPowerScreen() {
 void refreshSetupScreen() {
 
     String strTimeStatus;
-    strTimeStatus.reserve(14);
+    strTimeStatus.reserve(16);
     switch (timeStatus()) {
         case (timeNotSet):
             strTimeStatus= "timeNotSet";
@@ -212,7 +203,7 @@ void changeScreen(int newScreen) {
             break; 
     }
 
-    md_screenRefresh.start(33.33333); // 30 fps
+    md_screenRefresh.start(1000 / 30); // 30 fps
 
 }
 

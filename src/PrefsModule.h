@@ -26,9 +26,6 @@ extern int batteryCapacity;
 extern int pmPowerSaverBatt;
 extern int pmPowerSaverBright;
 
-extern bool time_isSet;
-extern Timezone centralTime;
-
 void preferences_setup();
 void preferences_save();
 void WiFi_onSaveParams();
