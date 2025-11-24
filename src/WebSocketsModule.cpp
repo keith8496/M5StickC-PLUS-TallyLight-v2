@@ -1,8 +1,7 @@
-#include <M5StickCPlus.h>
+#include "WebSocketsModule.h"
 #include <WebSocketsClient.h>
 #include <millisDelay.h>
 #include <ArduinoJson.h>
-#include "PrefsModule.h"
 #include "ScreenModule.h"
 #include "PowerModule.h"
 #include "NetworkModule.h"
@@ -12,8 +11,9 @@ bool ws_isConnected = false;
 
 int atem_pgm1_input_id = 0;
 int atem_pvw1_input_id = 0;
-char atem_pgm1_friendlyName[17] = "";
-char atem_pvw1_friendlyName[17] = "";
+
+char atem_pgm1_friendlyName[FRIENDLY_NAME_MAX_LEN + 1] = "";
+char atem_pvw1_friendlyName[FRIENDLY_NAME_MAX_LEN + 1] = "";
 
 millisDelay md_sendStatus;
 
@@ -22,19 +22,20 @@ millisDelay md_sendStatus;
 void webSockets_setup();
 void webSockets_onLoop();
 void webSockets_onEvent(WStype_t type, uint8_t* payload, size_t length);
-void webSockets_onTally(DynamicJsonDocument doc);
+void webSockets_onTally(JsonDocument doc);
 void webSockets_getTally();
 
 
 void webSockets_onLoop() {
 
-    if (md_sendStatus.justFinished()) {
+    if (ws_isConnected && md_sendStatus.justFinished()) {
         
         md_sendStatus.repeat();
         
-        //char buff[17];
+        //constexpr size_t BUFF_MAX_LEN   = 16;
+        //char buff[BUFF_MAX_LEN + 1];
         //ultoa(inputIds, buff, 2);
-        StaticJsonDocument<512> doc;
+        JsonDocument doc;
         
         doc["deviceId"] = deviceId;
         doc["MessageType"] = "DeviceStatus";
@@ -97,14 +98,14 @@ void webSockets_onEvent(WStype_t type, uint8_t* payload, size_t length) {
         case WStype_CONNECTED:
             ws_isConnected = true;
             Serial.println(F("Websockets connected."));
-            if (currentScreen == 0) startupLog("Websockets connected.", 1);
+            if (currentScreen == SCREEN_STARTUP) startupLog("Websockets connected.", 1);
             webSockets_getTally();
             md_sendStatus.start(60000);
             break;
             
         case WStype_TEXT: {
         
-            DynamicJsonDocument doc(length);
+            JsonDocument doc;
             DeserializationError error = deserializeJson(doc, payload, length);
 
             if (error.code() != DeserializationError::Ok) {
@@ -128,9 +129,9 @@ void webSockets_onEvent(WStype_t type, uint8_t* payload, size_t length) {
             break;
         
         case WStype_PING: {
-            /*char buff[65];
-            strcpy(buff, "Local Time: ");
-            strcat(buff, localTime.dateTime(ISO8601).c_str());
+            //constexpr size_t BUFF_MAX_LEN   = 64;
+            /*char buff[BUFF_MAX_LEN + 1];
+            snprintf(buff, sizeof(buff), "Local Time: %s", localTime.dateTime(ISO8601).c_str());
             Serial.print(buff);
             Serial.println(F(" Websockets PING"));*/
             break;
@@ -138,8 +139,7 @@ void webSockets_onEvent(WStype_t type, uint8_t* payload, size_t length) {
         
         case WStype_PONG: {
             /*char buff[65];
-            strcpy(buff, "Local Time: ");
-            strcat(buff, localTime.dateTime(ISO8601).c_str());
+            snprintf(buff, sizeof(buff), "Local Time: %s", localTime.dateTime(ISO8601).c_str());
             Serial.print(buff);
             Serial.println(F(" Websockets PONG"));*/
             break;
@@ -155,7 +155,7 @@ void webSockets_onEvent(WStype_t type, uint8_t* payload, size_t length) {
 }
 
 
-void webSockets_onTally(DynamicJsonDocument doc) {
+void webSockets_onTally(JsonDocument doc) {
 
     /*
     Serial.println(F("webSockets_onTally()"));
@@ -178,7 +178,12 @@ void webSockets_onTally(DynamicJsonDocument doc) {
         atem_pgm1_input_id = EventValue;
         //Serial.println(F("webSockets_onTally() EventValue Success"));
         const char* tmp_atem_pgm1_friendlyName = doc["MessageData"]["atem_pgm1_friendlyName"];
-        strcpy(atem_pgm1_friendlyName, tmp_atem_pgm1_friendlyName);
+        if (tmp_atem_pgm1_friendlyName) {
+            strncpy(atem_pgm1_friendlyName, tmp_atem_pgm1_friendlyName, sizeof(atem_pgm1_friendlyName) - 1);
+            atem_pgm1_friendlyName[sizeof(atem_pgm1_friendlyName) - 1] = '\0';
+        } else {
+            atem_pgm1_friendlyName[0] = '\0';
+        }
     } else if (strcmp(EventType, "atem_pvw1_input_id") == 0) {
         //Serial.println(F("webSockets_onTally() atem_pvw1_input_id"));
         //Serial.println(F("webSockets_onTally() EventValue"));
@@ -186,7 +191,12 @@ void webSockets_onTally(DynamicJsonDocument doc) {
         atem_pvw1_input_id = EventValue;
         //Serial.println(F("webSockets_onTally() EventValue Success"));
         const char* tmp_str_atem_pvw1_friendlyName = doc["MessageData"]["atem_pvw1_friendlyName"];
-        strcpy(atem_pvw1_friendlyName, tmp_str_atem_pvw1_friendlyName);
+        if (tmp_str_atem_pvw1_friendlyName) {
+            strncpy(atem_pvw1_friendlyName, tmp_str_atem_pvw1_friendlyName, sizeof(atem_pvw1_friendlyName) - 1);
+            atem_pvw1_friendlyName[sizeof(atem_pvw1_friendlyName) - 1] = '\0';
+        } else {
+            atem_pvw1_friendlyName[0] = '\0';
+        }
     }
 
     /*
@@ -212,7 +222,7 @@ void webSockets_getTally() {
 
 void webSockets_returnTally(int tallyIndicator) {
         
-        StaticJsonDocument<128> doc;
+        JsonDocument doc;
         
         doc["deviceId"] = deviceId;
         doc["MessageType"] = "ReturnTally";

@@ -1,9 +1,9 @@
-#include <M5StickCPlus.h>
+#include "PowerModule.h"
 #include <millisDelay.h>
 #include "RunningAverage.h"
-#include "PowerModule.h"
-#include "ScreenModule.h"
 #include "PrefsModule.h"
+#include <M5StickCPlus.h>
+#include "ScreenModule.h"
 
 
 power pwr;
@@ -157,11 +157,13 @@ void doPowerManagement() {
   static millisDelay md_lowBattery;
 
   const bool isBatWarningLevel = M5.Axp.GetWarningLevel();
-  if (isBatWarningLevel) {
-    strcpy(pwr.batWarningLevel, "LOW BATTERY");
-  } else {
-    strcpy(pwr.batWarningLevel, "");
-  }
+    if (isBatWarningLevel) {
+      const char* warning = "LOW BATTERY";
+      snprintf(pwr.batWarningLevel, sizeof(pwr.batWarningLevel), "%s", warning);
+    } else {
+      const char* warning = "";
+      snprintf(pwr.batWarningLevel, sizeof(pwr.batWarningLevel), "%s", warning);
+    }
   
   pwr.batVoltage = M5.Axp.GetBatVoltage();
   ravg_batVoltage.addValue(pwr.batVoltage);
@@ -210,7 +212,8 @@ void doPowerManagement() {
     
     if (currentBrightness > 20) {
 
-      strcpy(pwr.powerMode, "5v Charge");
+      const char* mode = "5v Charge";
+      snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       md_chargeToOff.stop();
 
     } else {
@@ -227,12 +230,14 @@ void doPowerManagement() {
       }
       
       if (md_chargeToOff.isRunning()) {
-        char powerMode[20];
+        constexpr size_t POWER_MODE_MAX_LEN   = 20;
+        char powerMode[POWER_MODE_MAX_LEN];
         const int md_chargeToOffRemaining = floor(md_chargeToOff.remaining() / 1000);
         snprintf(powerMode, 20, "Charge to Off (%i)", md_chargeToOffRemaining);
-        strcpy(pwr.powerMode, powerMode);
+        snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", powerMode);
       } else {
-        strcpy(pwr.powerMode, "Charge to Off");
+        const char* mode = "Charge to Off";
+        snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       }
 
     }
@@ -240,7 +245,8 @@ void doPowerManagement() {
   } else if (pwr.vbusVoltage > 3.8) {   // 5v USB Charge
 
     md_chargeToOff.stop();
-    strcpy(pwr.powerMode, "USB Charge");
+    const char* mode = "USB Charge";
+    snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
     pwr.maxBrightness = 100;
     
     if (pwr.maxChargeCurrent != 100) {
@@ -255,7 +261,8 @@ void doPowerManagement() {
     }
 
     if (isBatWarningLevel) {
-      strcpy(pwr.powerMode, "Low Battery");
+      const char* mode = "Low Battery";
+      snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       pwr.maxBrightness = pmPowerSaverBright;
       if (md_lowBattery.justFinished()) {
         md_lowBattery.repeat();
@@ -265,11 +272,13 @@ void doPowerManagement() {
         md_lowBattery.start(60000);
       }
     } else if (floor(pwr.batPercentageMin) <= pmPowerSaverBatt) {
-      strcpy(pwr.powerMode, "Power Saver");
+      const char* mode = "Power Saver";
+      snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       pwr.maxBrightness = pmPowerSaverBright;
       if (currentBrightness > pwr.maxBrightness) setBrightness(pwr.maxBrightness);
     } else {
-      strcpy(pwr.powerMode, "Balanced");
+      const char* mode = "Balanced";
+      snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       pwr.maxBrightness = 100;
     }
 

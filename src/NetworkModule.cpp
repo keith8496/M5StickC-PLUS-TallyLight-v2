@@ -1,10 +1,8 @@
-#include <M5StickCPlus.h>
-#include <WiFiManager.h>
+#include "NetworkModule.h"
 #include <millisDelay.h>
-#include <ezTime.h>             // set #define EZTIME_CACHE_NVS in this file
-#include "PrefsModule.h"
-#include "WebSocketsModule.h"
 #include "ScreenModule.h"
+#include "PrefsModule.h"
+#include <M5StickCPlus.h>
 
 WiFiManager wm;
 millisDelay ms_WiFi;
@@ -43,7 +41,7 @@ void WiFi_setup () {
     wm.setRemoveDuplicateAPs(false);
     
     if (!wm.autoConnect(deviceName)) {
-        if (currentScreen == 0) {
+        if (currentScreen == SCREEN_STARTUP) {
             startupLog("No access point found!",1);
             startupLog("Config Portal Started.\r\nPress M5 to abort.",1);
         }
@@ -52,29 +50,29 @@ void WiFi_setup () {
             M5.update();
             if (M5.BtnA.wasReleased()) wm.stopConfigPortal();
         }
-        if (currentScreen == 0) startupLog("Config Portal Stopped...",1);
+        if (currentScreen == SCREEN_STARTUP) startupLog("Config Portal Stopped...",1);
         //ESP.restart();
     }
 
     // ezTime
-    if (currentScreen == 0) startupLog("Initializing ezTime...", 1);
+    if (currentScreen == SCREEN_STARTUP) startupLog("Initializing ezTime...", 1);
     if (!localTime.setCache("timezone", "localTime")) localTime.setLocation(localTimeZone);
     localTime.setDefault();
     setServer(ntpServer);
     if (wm.getWLStatusString() != "WL_CONNECTED") {
-        if (currentScreen == 0) startupLog("ezTime initialization incomplete...", 1);
+        if (currentScreen == SCREEN_STARTUP) startupLog("ezTime initialization incomplete...", 1);
         return;
     }
     waitForSync(60);
     if (timeStatus() == timeSet) {
         Serial.println("UTC Time: " + UTC.dateTime(ISO8601));
         Serial.println("Local Time: " + localTime.dateTime(ISO8601));
-        char buff[65];
-        strcpy(buff, "Local Time: ");
-        strcat(buff, localTime.dateTime(ISO8601).c_str());
-        if (currentScreen == 0) startupLog(buff, 1);
+        constexpr size_t BUFF_MAX_LEN   = 65;
+        char buff[BUFF_MAX_LEN];
+        snprintf(buff, sizeof(buff), "Local Time: %s", localTime.dateTime(ISO8601).c_str());
+        if (currentScreen == SCREEN_STARTUP) startupLog(buff, 1);
     } else {
-        if (currentScreen == 0) startupLog("ezTime initialization failed...", 1);
+        if (currentScreen == SCREEN_STARTUP) startupLog("ezTime initialization failed...", 1);
     }
     
 }
@@ -118,10 +116,9 @@ void WiFi_onEvent(WiFiEvent_t event) {
           Serial.print(F("Obtained IP address: "));
           Serial.println(WiFi.localIP());
           updateNTP();
-          if (currentScreen == 0) {
+          if (currentScreen == SCREEN_STARTUP) {
             char buff[65];
-            strcpy(buff, "Obtained IP address: ");
-            strcat(buff, WiFi.localIP().toString().c_str());
+            snprintf(buff, sizeof(buff), "Obtained IP address: %s", WiFi.localIP().toString().c_str());
             startupLog(buff, 1);
           }
           break;

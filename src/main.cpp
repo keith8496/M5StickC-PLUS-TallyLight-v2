@@ -1,16 +1,17 @@
+#include <Arduino.h>
 #include <M5StickCPlus.h>
+#include "millisDelay.h"
+#include "ScreenModule.h"
 #include "NetworkModule.h"
-#include "WebSocketsModule.h"
 #include "PrefsModule.h"
 #include "PowerModule.h"
-#include "ScreenModule.h"
-#include "millisDelay.h"
-#include "RunningAverage.h"
+#include "WebSocketsModule.h"
 
 millisDelay ms_startup;
 
 #define TPS false
 #if TPS
+    #include "RunningAverage.h"
     millisDelay ms_runningAvg;
     millisDelay ms_tps;
     int ticks = 0;
@@ -18,9 +19,6 @@ millisDelay ms_startup;
     RunningAverage ra_TPS(samples);
 #endif
 
-
-char deviceId[17];
-char deviceName[33];
 
 void setup () {
 
@@ -35,9 +33,10 @@ void setup () {
     // Set deviceId and deviceName
     uint8_t macAddress[6];
     WiFi.macAddress(macAddress);
-    sprintf(deviceId, "%02X%02X%02X", macAddress[3], macAddress[4], macAddress[5]);
-    strcpy(deviceName, "M5StickC-Plus-");
-    strcat(deviceName, deviceId);
+    snprintf(deviceId, sizeof(deviceId),
+         "%02X%02X%02X", macAddress[3], macAddress[4], macAddress[5]);
+    snprintf(deviceName, sizeof(deviceName),
+         "M5StickC-Plus-%s", deviceId);
     
     changeScreen(0);
     startupLog("Starting...", 1);
@@ -55,7 +54,7 @@ void setup () {
         WiFi_onLoop();
         webSockets_onLoop();
         power_onLoop();
-        if (ws_isConnected & (timeStatus() == timeSet)) {
+        if (ws_isConnected && (timeStatus() == timeSet)) {
             ms_startup.stop();
             startupLog("Startup complete.", 1);
         }
