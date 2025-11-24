@@ -9,8 +9,8 @@
 
 millisDelay md_screenRefresh;
 
-const int maxScreen = 3;
-int currentScreen = 0;          // 0-Startup, 1-Tally, 2-Power, 3-Setup
+ScreenId currentScreen = SCREEN_STARTUP;
+const int maxScreen = SCREEN_SETUP;
 int currentBrightness = 11;     // default 11, max 12
 
 const int tft_width = 240;
@@ -51,7 +51,7 @@ void refreshTallyScreen() {
    if (strcmp(friendlyName, atem_pvw1_friendlyName) == 0) isPreview = true;
 
     if (isProgram) {
-        tallyScreen.fillRect(0,0,240,135, TFT_RED);\
+        tallyScreen.fillRect(0,0,240,135, TFT_RED);
         if (prevTally != 2) {prevTally = 2; webSockets_returnTally(2);}
     } else if (isPreview) {
         tallyScreen.fillRect(0,0,240,135, TFT_GREEN);
@@ -71,7 +71,9 @@ void refreshTallyScreen() {
     tallyScreen.setTextSize(2);
     tallyScreen.setCursor((tft_width/2)-20, 8);
     tallyScreen.setTextColor(TFT_WHITE, TFT_BLACK);
-    tallyScreen.print(localTime.dateTime("g:i:s A"));
+    auto now = localTime.dateTime("g:i:s A");
+    tallyScreen.print(now ? now : "--:--:--");
+
     
     // Friendly Name
     tallyScreen.setTextSize(9);
@@ -164,10 +166,10 @@ void changeScreen(int newScreen) {
         Serial.println(F("changeScreen() error: \"invalid screen number rejected\""));
         return;
     } else if (newScreen == -1) {
-        if (currentScreen == maxScreen) currentScreen = 0;  // reset
-        currentScreen++;
+        if (currentScreen == maxScreen) currentScreen = SCREEN_STARTUP;  // reset
+        currentScreen = static_cast<ScreenId>((static_cast<int>(currentScreen) + 1) % (maxScreen + 1));
     } else {
-        currentScreen = newScreen;
+        currentScreen = static_cast<ScreenId>(newScreen);
     }
 
     if (wm.getWebPortalActive()) wm.stopWebPortal();
@@ -183,23 +185,23 @@ void changeScreen(int newScreen) {
     M5.Lcd.setCursor(0,0);
 
     switch (currentScreen) {
-        case 0:
+        case SCREEN_STARTUP:
             // startupScreen
             startupScreen.createSprite(tft_width-5, tft_heigth-5);
             startupScreen.setRotation(3);
             break;
-        case 1:
+        case SCREEN_TALLY:
             // tallyScreen
             tallyScreen.createSprite(tft_width, tft_heigth);
             tallyScreen.setRotation(3);
             webSockets_getTally();
             break;
-        case 2:
+        case SCREEN_POWER:
             // powerScreen
             powerScreen.createSprite(tft_width, tft_heigth);
             powerScreen.setRotation(3);
             break;
-        case 3:
+        case SCREEN_SETUP:
             // setupScreen
             if (!wm.getWebPortalActive()) wm.startWebPortal();
             setupScreen.createSprite(tft_width, tft_heigth);
@@ -222,16 +224,16 @@ void refreshScreen() {
     md_screenRefresh.repeat();
     
     switch (currentScreen) {
-        case 0:
+        case SCREEN_STARTUP:
             refreshStartupScreen();
             break;
-        case 1:
+        case SCREEN_TALLY:
             refreshTallyScreen();
             break;
-        case 2:
+        case SCREEN_POWER:
             refreshPowerScreen();
             break;
-        case 3:
+        case SCREEN_SETUP:
             refreshSetupScreen();
             break;
         default:

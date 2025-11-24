@@ -1,4 +1,5 @@
-extern int currentScreen;
+enum ScreenId { SCREEN_STARTUP, SCREEN_TALLY, SCREEN_POWER, SCREEN_SETUP };
+extern ScreenId currentScreen;
 extern int currentBrightness;
 
 void refreshScreen();
