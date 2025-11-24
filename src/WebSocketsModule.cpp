@@ -1,8 +1,7 @@
-#include <M5StickCPlus.h>
+#include "WebSocketsModule.h"
 #include <WebSocketsClient.h>
 #include <millisDelay.h>
 #include <ArduinoJson.h>
-#include "PrefsModule.h"
 #include "ScreenModule.h"
 #include "PowerModule.h"
 #include "NetworkModule.h"
@@ -12,8 +11,9 @@ bool ws_isConnected = false;
 
 int atem_pgm1_input_id = 0;
 int atem_pvw1_input_id = 0;
-char atem_pgm1_friendlyName[17] = "";
-char atem_pvw1_friendlyName[17] = "";
+
+char atem_pgm1_friendlyName[FRIENDLY_NAME_MAX_LEN + 1] = "";
+char atem_pvw1_friendlyName[FRIENDLY_NAME_MAX_LEN + 1] = "";
 
 millisDelay md_sendStatus;
 
@@ -32,7 +32,8 @@ void webSockets_onLoop() {
         
         md_sendStatus.repeat();
         
-        //char buff[17];
+        //constexpr size_t BUFF_MAX_LEN   = 16;
+        //char buff[BUFF_MAX_LEN + 1];
         //ultoa(inputIds, buff, 2);
         JsonDocument doc;
         
@@ -128,7 +129,8 @@ void webSockets_onEvent(WStype_t type, uint8_t* payload, size_t length) {
             break;
         
         case WStype_PING: {
-            /*char buff[65];
+            //constexpr size_t BUFF_MAX_LEN   = 64;
+            /*char buff[BUFF_MAX_LEN + 1];
             snprintf(buff, sizeof(buff), "Local Time: %s", localTime.dateTime(ISO8601).c_str());
             Serial.print(buff);
             Serial.println(F(" Websockets PING"));*/

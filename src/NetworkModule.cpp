@@ -1,11 +1,8 @@
-#include <Arduino.h>
-#include <M5StickCPlus.h>
-#include <WiFiManager.h>
+#include "NetworkModule.h"
 #include <millisDelay.h>
-#include <ezTime.h>             // set #define EZTIME_CACHE_NVS in this file
-#include "PrefsModule.h"
-#include "WebSocketsModule.h"
 #include "ScreenModule.h"
+#include "PrefsModule.h"
+#include <M5StickCPlus.h>
 
 WiFiManager wm;
 millisDelay ms_WiFi;
@@ -70,7 +67,8 @@ void WiFi_setup () {
     if (timeStatus() == timeSet) {
         Serial.println("UTC Time: " + UTC.dateTime(ISO8601));
         Serial.println("Local Time: " + localTime.dateTime(ISO8601));
-        char buff[65];
+        constexpr size_t BUFF_MAX_LEN   = 65;
+        char buff[BUFF_MAX_LEN];
         snprintf(buff, sizeof(buff), "Local Time: %s", localTime.dateTime(ISO8601).c_str());
         if (currentScreen == 0) startupLog(buff, 1);
     } else {

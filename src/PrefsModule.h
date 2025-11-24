@@ -26,9 +26,6 @@ extern int batteryCapacity;
 extern int pmPowerSaverBatt;
 extern int pmPowerSaverBright;
 
-extern char deviceId[17];
-extern char deviceName[33];
-
 extern bool time_isSet;
 extern Timezone centralTime;
 
