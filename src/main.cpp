@@ -89,17 +89,29 @@ void setup () {
     startupLog("Initializing WiFi...", 1);
     WiFi_setup();
     ms_startup.start(30000);
-    startupLog("Initializing webSockets...", 1);
-    webSockets_setup();
+    startupLog("Waiting for MQTT...", 1);
+
+    // --- Initialize MQTT ---
+    g_bootMillis = millis();
+    prefs_applyToConfig(g_config);
+    g_mqtt.setMessageHandler(onMqttMessage);
+    g_mqtt.begin();
 
     while (ms_startup.isRunning()) {
+
         WiFi_onLoop();
-        webSockets_onLoop();
         power_onLoop();
-        if (ws_isConnected && (timeStatus() == timeSet)) {
+
+        // Pump MQTT client while waiting
+        g_mqtt.loop();
+
+        // When connected and time is set, finish startup.
+        if (g_mqtt.isConnected() && (timeStatus() == timeSet)) {
             ms_startup.stop();
             startupLog("Startup complete.", 1);
         }
+
+        // Timeout hit?
         if (ms_startup.justFinished()) {
             ms_startup.stop();
             startupLog("Startup incomplete.", 1);
@@ -113,20 +125,6 @@ void setup () {
         ms_tps.start(1000);
         ms_runningAvg.start(60000);
     #endif
-
-    // Begin New MQTT Stuff
-    g_bootMillis = millis();
-
-    // Bridge those values into ConfigState
-    // We already called preferences_setup() earlier,
-    // so the global buffers are populated. Just bridge now:
-    prefs_applyToConfig(g_config);
-
-    // Init MQTT wrapper
-    g_mqtt.setMessageHandler(onMqttMessage);
-    g_mqtt.begin();
-    // End New MQTT Stuff
-
 }
 
 void loop () {
