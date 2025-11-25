@@ -10,7 +10,7 @@ All tally devices MUST follow this specification for interoperability with Compa
 Each device is identified by a unique `{device}` string, such as:
 
 ```
-m5stick-7A90F3
+7A90F3
 ```
 
 This is usually derived from the MAC address of the device.
@@ -73,20 +73,16 @@ Example JSON:
 
 Global configuration applies to all tally devices unless overridden by per-device config (when applicable).
 
+All global config topics are **retained**.
+
 ## 3.1 Network / Infrastructure
 
 | Topic | Payload Example | Notes |
 |--------|-------------------------|-------|
-| `sanctuary/tally/config/wifi_ssid` | `"MyChurchWiFi"` | Wi-Fi SSID |
-| `sanctuary/tally/config/wifi_password` | `"Secret123!"` | Wi-Fi password |
-| `sanctuary/tally/config/mqtt_server` | `"10.0.20.15"` | MQTT broker address |
-| `sanctuary/tally/config/mqtt_port` | `"1883"` | MQTT port |
-| `sanctuary/tally/config/mqtt_username` | `"tally"` | MQTT username |
-| `sanctuary/tally/config/mqtt_password` | `"tallypass"` | MQTT password |
 | `sanctuary/tally/config/ntp_server` | `"pool.ntp.org"` | NTP server hostname/IP |
 | `sanctuary/tally/config/timezone` | `"America/Chicago"` or `"GMT-6"` | Device timezone |
 
-All global config topics are **retained**.
+WiFi and MQTT settings will be configured in WifiManager.
 
 ---
 
@@ -94,9 +90,9 @@ All global config topics are **retained**.
 
 | Topic | Payload Example | Purpose |
 |--------|------------------|---------|
-| `sanctuary/tally/config/brightness` | `"5"` | Default screen brightness |
-| `sanctuary/tally/config/powersaver_brightness` | `"2"` | Brightness when battery low |
-| `sanctuary/tally/config/powersaver_battery_pct` | `"20"` | Battery threshold (%) for power saver mode |
+| `sanctuary/tally/config/brightness` | `"50"` | Default screen brightness |
+| `sanctuary/tally/config/powersaver_brightness` | `"20"` | Brightness when battery low |
+| `sanctuary/tally/config/powersaver_battery_pct` | `"25"` | Battery threshold (%) for power saver mode |
 | `sanctuary/tally/config/tally_color_program` | `"#FF0000"` | Color of program tally |
 | `sanctuary/tally/config/tally_color_preview` | `"#00FF00"` | Color of preview tally |
 
@@ -133,8 +129,8 @@ These apply only to the designated tally device.
 
 | Topic | Payload Example | Purpose |
 |--------|-------------------------|---------|
-| `sanctuary/tally/{device}/config/name` | `"Camera 3 Left"` | Friendly device name |
-| `sanctuary/tally/{device}/config/input` | `"3"` | ATEM input this tally listens to |
+| `sanctuary/tally/{device}/config/name` | `"Cam1"` | Friendly device name |
+| `sanctuary/tally/{device}/config/input` | `"1"` | ATEM input this tally listens to |
 | `sanctuary/tally/{device}/config/battery_capacity` | `"2200"` | Battery capacity (mAh) for SoC |
 
 ---
