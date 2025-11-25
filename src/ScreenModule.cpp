@@ -1,17 +1,26 @@
-
-#include "ScreenModule.h"
-#include "millisDelay.h"
+#include <millisDelay.h>
 #include <M5StickCPlus.h>
-#include "PrefsModule.h"
-#include "WebSocketsModule.h"
-#include "PowerModule.h"
+
 #include "NetworkModule.h"
+#include "PowerModule.h"
+#include "PrefsModule.h"
+#include "ScreenModule.h"
+#include "WebSocketsModule.h"
+
+#include "ConfigState.h"
+#include "TallyState.h"
+
+extern ConfigState g_config;
+extern TallyState  g_tally;
 
 millisDelay md_screenRefresh;
 
 ScreenId currentScreen = SCREEN_STARTUP;
 const int maxScreen = SCREEN_SETUP;
-int currentBrightness = 11;     // default 11, max 12
+
+// Logical brightness in the 0–100 range.
+// This is what MQTT / prefs / power mgmt all agree on.
+int currentBrightness = 50;     // default to 50%
 
 const int tft_width = 240;
 const int tft_heigth = 135;
@@ -35,22 +44,48 @@ int prevTally = 0;
 
 void refreshTallyScreen() {
 
+    // --- Determine this device's ATEM input ID ---
+    // EffectiveConfig merges global + device config
+    EffectiveConfig eff = g_config.effective();
+    uint8_t myInput = eff.atemInput;
+
+    // If no input is configured yet, treat as idle & just show UI
     bool isProgram = false;
     bool isPreview = false;
 
-   if (strcmp(friendlyName, atem_pgm1_friendlyName) == 0) isProgram = true;
-   if (strcmp(friendlyName, atem_pvw1_friendlyName) == 0) isPreview = true;
-
-    if (isProgram) {
-        tallyScreen.fillRect(0,0,240,135, TFT_RED);
-        if (prevTally != 2) {prevTally = 2; webSockets_returnTally(2);}
-    } else if (isPreview) {
-        tallyScreen.fillRect(0,0,240,135, TFT_GREEN);
-        if (prevTally != 1) {prevTally = 1; webSockets_returnTally(1);}
-    } else {
-        tallyScreen.fillRect(0,0,240,135, TFT_BLACK);
-        if (prevTally != 0) {prevTally = 0; webSockets_returnTally(0);}
+    if (myInput != 0) {
+        isProgram = g_tally.isProgram(myInput);
+        isPreview = g_tally.isPreview(myInput);
     }
+
+    // --- Background color based on tally state ---
+    if (isProgram) {
+        tallyScreen.fillRect(0, 0, 240, 135, TFT_RED);
+        if (prevTally != 2) { prevTally = 2; webSockets_returnTally(2); }
+    } else if (isPreview) {
+        tallyScreen.fillRect(0, 0, 240, 135, TFT_GREEN);
+        if (prevTally != 1) { prevTally = 1; webSockets_returnTally(1); }
+    } else {
+        tallyScreen.fillRect(0, 0, 240, 135, TFT_BLACK);
+        if (prevTally != 0) { prevTally = 0; webSockets_returnTally(0); }
+    }
+
+//    bool isProgram = false;
+//    bool isPreview = false;
+
+//    if (strcmp(friendlyName, atem_pgm1_friendlyName) == 0) isProgram = true;
+//    if (strcmp(friendlyName, atem_pvw1_friendlyName) == 0) isPreview = true;
+
+//     if (isProgram) {
+//         tallyScreen.fillRect(0,0,240,135, TFT_RED);
+//         if (prevTally != 2) {prevTally = 2; webSockets_returnTally(2);}
+//     } else if (isPreview) {
+//         tallyScreen.fillRect(0,0,240,135, TFT_GREEN);
+//         if (prevTally != 1) {prevTally = 1; webSockets_returnTally(1);}
+//     } else {
+//         tallyScreen.fillRect(0,0,240,135, TFT_BLACK);
+//         if (prevTally != 0) {prevTally = 0; webSockets_returnTally(0);}
+//     }
     
     // Battery
     tallyScreen.setTextSize(1);
@@ -234,9 +269,19 @@ void refreshScreen() {
 }
 
 
+static const int minBrightness = 10;
 void setBrightness(int newBrightness) {
-    if (newBrightness > pwr.maxBrightness) newBrightness = 10;
+    // Clamp to 0–100 and respect the current power-mode cap.
+    if (newBrightness < minBrightness) {
+        newBrightness = minBrightness;
+    }
+    if (newBrightness > pwr.maxBrightness) {
+        newBrightness = minBrightness; // wrap to min if exceeding max
+    }
+
     currentBrightness = newBrightness;
+
+    // On M5StickC-Plus, ScreenBreath expects 0–100.
     M5.Axp.ScreenBreath(currentBrightness);
 }
 

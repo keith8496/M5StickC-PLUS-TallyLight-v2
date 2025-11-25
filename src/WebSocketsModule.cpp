@@ -1,4 +1,7 @@
 #include "WebSocketsModule.h"
+
+#if USE_WEBSOCKETS
+
 #include <WebSocketsClient.h>
 #include <millisDelay.h>
 #include <ArduinoJson.h>
@@ -234,3 +237,19 @@ void webSockets_returnTally(int tallyIndicator) {
         serializeJson(doc, json);
         ws.sendTXT(json);
 }
+
+#else   // USE_WEBSOCKETS == 0  → stubbed-out implementation
+
+bool ws_isConnected = false;
+int atem_pgm1_input_id = 0;
+int atem_pvw1_input_id = 0;
+char atem_pgm1_friendlyName[FRIENDLY_NAME_MAX_LEN + 1] = "";
+char atem_pvw1_friendlyName[FRIENDLY_NAME_MAX_LEN + 1] = "";
+
+// No-op versions so the rest of the firmware doesn’t care.
+void webSockets_setup() {}
+void webSockets_onLoop() {}
+void webSockets_getTally() {}
+void webSockets_returnTally(int) {}
+
+#endif  // USE_WEBSOCKETS
