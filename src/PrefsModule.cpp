@@ -156,10 +156,10 @@ void prefs_applyToConfig(ConfigState& cfg) {
     // Global power-saver config (from WiFi portal / prefs)
     cfg.global.powersaverBatteryPct = static_cast<uint8_t>(pmPowerSaverBatt);
 
-    // pmPowerSaverBright is currently 0–100; map to a 0–10-ish brightness scale
-    int bright = pmPowerSaverBright / 10;       // e.g. 30 → 3
-    if (bright < 0)  bright = 0;
-    if (bright > 10) bright = 10;
+    // pmPowerSaverBright is stored as 0–100 and used directly as a brightness percentage
+    int bright = pmPowerSaverBright;            // 0–100
+    if (bright < 0)    bright = 0;
+    if (bright > 100)  bright = 100;
     cfg.global.powersaverBrightness = static_cast<uint8_t>(bright);
 
     // NTP + timezone
@@ -172,8 +172,8 @@ void prefs_applyToConfig(ConfigState& cfg) {
     cfg.global.mqttUsername = String(mqtt_username);
     cfg.global.mqttPassword = String(mqtt_password);
 
-    // Optional: set a default normal brightness if you like
+    // Optional: set a default normal brightness if still unset (0)
     if (cfg.global.brightness == 0) {
-        cfg.global.brightness = 5;
+        cfg.global.brightness = 50;  // 50% by default
     }
 }

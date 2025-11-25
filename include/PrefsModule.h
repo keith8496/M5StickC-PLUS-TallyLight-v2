@@ -1,7 +1,6 @@
 
 #pragma once
 #include <Arduino.h>
-#include <ezTime.h> // you already include this here :contentReference[oaicite:3]{index=3}
 
 constexpr size_t FRIENDLY_NAME_MAX_LEN   = 16;  // what you want visible
 constexpr size_t DEVICE_ID_MAX_LEN       = 16;
