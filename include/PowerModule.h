@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "ConfigState.h"
 
 constexpr size_t BAT_WARNING_LEVEL_MAX_LEN   = 16;
 constexpr size_t POWER_MODE_MAX_LEN   = 16;
@@ -28,3 +29,5 @@ extern power pwr;
 
 void power_setup();
 void power_onLoop();
+
+void prefs_applyToConfig(ConfigState& cfg);
