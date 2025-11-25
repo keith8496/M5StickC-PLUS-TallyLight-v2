@@ -56,7 +56,7 @@ void preferences_setup() {
     snprintf(mqtt_server, sizeof(mqtt_server), "%s", preferences.getString("mqtt_server", "172.16.30.11").c_str());
     mqtt_port = preferences.getInt("mqtt_port", 1883);
     snprintf(mqtt_username, sizeof(mqtt_username), "%s", preferences.getString("mqtt_username", "").c_str());
-    snprintf(mqtt_password, sizeof(mqtt_password), "%s", preferences.getString("mqtt_password", "").c_str()); // move me soon!
+    snprintf(mqtt_password, sizeof(mqtt_password), "%s", preferences.getString("mqtt_password", "").c_str());
     
     preferences.end();
 
