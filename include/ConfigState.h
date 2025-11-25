@@ -34,10 +34,11 @@ struct GlobalConfig {
     String ntpServer;
     String timezone;          // e.g. "America/Chicago" or "GMT-6"
 
-    // Display / tally colours
-    uint8_t brightness = 5;   // 0–7 or 0–10 depending on your mapping
-    uint8_t powersaverBrightness = 2;
-    uint8_t powersaverBatteryPct = 20; // %
+    // Display / tally brightness (0–100 logical scale)
+    // These are "percent-ish" values that map directly into ScreenBreath(0–100).
+    uint8_t brightness = 50;            // normal mode brightness (default 50%)
+    uint8_t powersaverBrightness = 20;  // power-saver brightness (default 20%)
+    uint8_t powersaverBatteryPct = 25;  // enable power-saver mode below this battery %
 
     String tallyColorProgram = "#FF0000";
     String tallyColorPreview = "#00FF00";

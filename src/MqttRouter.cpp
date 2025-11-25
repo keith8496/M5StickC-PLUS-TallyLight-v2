@@ -110,10 +110,14 @@ static void handleGlobalConfig(ConfigState& cfg, const String& key, const String
     // Display / tally
     else if (key == "brightness") {
         int v = payload.toInt();
-        if (v >= 0 && v <= 10) cfg.global.brightness = static_cast<uint8_t>(v);
+        if (v >= 0 && v <= 100) {
+            cfg.global.brightness = static_cast<uint8_t>(v);
+        }
     } else if (key == "powersaver_brightness") {
         int v = payload.toInt();
-        if (v >= 0 && v <= 10) cfg.global.powersaverBrightness = static_cast<uint8_t>(v);
+        if (v >= 0 && v <= 100) {
+            cfg.global.powersaverBrightness = static_cast<uint8_t>(v);
+        }
     } else if (key == "powersaver_battery_pct") {
         int v = payload.toInt();
         if (v >= 0 && v <= 100) cfg.global.powersaverBatteryPct = static_cast<uint8_t>(v);
