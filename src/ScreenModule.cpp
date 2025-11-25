@@ -269,16 +269,14 @@ void refreshScreen() {
 }
 
 
+static const int minBrightness = 10;
 void setBrightness(int newBrightness) {
     // Clamp to 0–100 and respect the current power-mode cap.
-    if (newBrightness < 0) {
-        newBrightness = 0;
+    if (newBrightness < minBrightness) {
+        newBrightness = minBrightness;
     }
     if (newBrightness > pwr.maxBrightness) {
-        newBrightness = pwr.maxBrightness;
-    }
-    if (newBrightness > 100) {
-        newBrightness = 100;
+        newBrightness = minBrightness; // wrap to min if exceeding max
     }
 
     currentBrightness = newBrightness;
