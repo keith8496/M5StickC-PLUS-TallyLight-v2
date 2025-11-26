@@ -243,8 +243,8 @@ void webSockets_returnTally(int tallyIndicator) {
 bool ws_isConnected = false;
 int atem_pgm1_input_id = 0;
 int atem_pvw1_input_id = 0;
-char atem_pgm1_friendlyName[FRIENDLY_NAME_MAX_LEN + 1] = "";
-char atem_pvw1_friendlyName[FRIENDLY_NAME_MAX_LEN + 1] = "";
+//char atem_pgm1_friendlyName[FRIENDLY_NAME_MAX_LEN + 1] = "";
+//char atem_pvw1_friendlyName[FRIENDLY_NAME_MAX_LEN + 1] = "";
 
 // No-op versions so the rest of the firmware doesn’t care.
 void webSockets_setup() {}
