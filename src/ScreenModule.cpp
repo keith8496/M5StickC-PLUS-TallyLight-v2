@@ -3,9 +3,7 @@
 
 #include "NetworkModule.h"
 #include "PowerModule.h"
-#include "PrefsModule.h"
 #include "ScreenModule.h"
-#include "WebSocketsModule.h"
 
 #include "ConfigState.h"
 #include "TallyState.h"
@@ -46,7 +44,7 @@ void refreshTallyScreen() {
 
     // --- Determine this device's ATEM input ID ---
     // EffectiveConfig merges global + device config
-    EffectiveConfig eff = g_config.effective();
+    const auto eff = g_config.effective();
     uint8_t myInput = eff.atemInput;
 
     // If no input is configured yet, treat as idle & just show UI
@@ -61,31 +59,14 @@ void refreshTallyScreen() {
     // --- Background color based on tally state ---
     if (isProgram) {
         tallyScreen.fillRect(0, 0, 240, 135, TFT_RED);
-        if (prevTally != 2) { prevTally = 2; webSockets_returnTally(2); }
+        // return mqtt
     } else if (isPreview) {
         tallyScreen.fillRect(0, 0, 240, 135, TFT_GREEN);
-        if (prevTally != 1) { prevTally = 1; webSockets_returnTally(1); }
+        // return mqtt
     } else {
         tallyScreen.fillRect(0, 0, 240, 135, TFT_BLACK);
-        if (prevTally != 0) { prevTally = 0; webSockets_returnTally(0); }
+        // return mqtt
     }
-
-//    bool isProgram = false;
-//    bool isPreview = false;
-
-//    if (strcmp(friendlyName, atem_pgm1_friendlyName) == 0) isProgram = true;
-//    if (strcmp(friendlyName, atem_pvw1_friendlyName) == 0) isPreview = true;
-
-//     if (isProgram) {
-//         tallyScreen.fillRect(0,0,240,135, TFT_RED);
-//         if (prevTally != 2) {prevTally = 2; webSockets_returnTally(2);}
-//     } else if (isPreview) {
-//         tallyScreen.fillRect(0,0,240,135, TFT_GREEN);
-//         if (prevTally != 1) {prevTally = 1; webSockets_returnTally(1);}
-//     } else {
-//         tallyScreen.fillRect(0,0,240,135, TFT_BLACK);
-//         if (prevTally != 0) {prevTally = 0; webSockets_returnTally(0);}
-//     }
     
     // Battery
     tallyScreen.setTextSize(1);
@@ -105,7 +86,7 @@ void refreshTallyScreen() {
     tallyScreen.setTextSize(9);
     tallyScreen.setCursor(10,80);
     tallyScreen.setTextColor(TFT_WHITE);
-    tallyScreen.print(friendlyName);
+    tallyScreen.print(eff.friendlyName);
     
     tallyScreen.pushSprite(0,0);
     
@@ -137,6 +118,8 @@ void refreshPowerScreen() {
 
 void refreshSetupScreen() {
 
+    const auto eff = g_config.effective();
+   
     String strTimeStatus;
     strTimeStatus.reserve(16);
     switch (timeStatus()) {
@@ -166,8 +149,8 @@ void refreshSetupScreen() {
     setupScreen.println("IP: " + WiFi.localIP().toString());
     setupScreen.println("NTP: " + strTimeStatus);
     setupScreen.println();
-    setupScreen.println("Node-RED Server: " + String(nodeRED_ServerIP) + ":" + String(nodeRED_ServerPort));
-    setupScreen.println("Connected: " + String(ws_isConnected));
+    setupScreen.println("MQTT Server: " + String(eff.mqttServer) + ":" + String(eff.mqttPort));
+    setupScreen.println("Connected: " + String(eff.mqtt_isConnected ? "Yes" : "No"));
     setupScreen.pushSprite(10,10);
 
 }
@@ -220,7 +203,6 @@ void changeScreen(int newScreen) {
             // tallyScreen
             tallyScreen.createSprite(tft_width, tft_heigth);
             tallyScreen.setRotation(3);
-            webSockets_getTally();
             break;
         case SCREEN_POWER:
             // powerScreen
