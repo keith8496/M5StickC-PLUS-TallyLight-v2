@@ -69,23 +69,6 @@ void refreshTallyScreen() {
         tallyScreen.fillRect(0, 0, 240, 135, TFT_BLACK);
         if (prevTally != 0) { prevTally = 0; webSockets_returnTally(0); }
     }
-
-//    bool isProgram = false;
-//    bool isPreview = false;
-
-//    if (strcmp(friendlyName, atem_pgm1_friendlyName) == 0) isProgram = true;
-//    if (strcmp(friendlyName, atem_pvw1_friendlyName) == 0) isPreview = true;
-
-//     if (isProgram) {
-//         tallyScreen.fillRect(0,0,240,135, TFT_RED);
-//         if (prevTally != 2) {prevTally = 2; webSockets_returnTally(2);}
-//     } else if (isPreview) {
-//         tallyScreen.fillRect(0,0,240,135, TFT_GREEN);
-//         if (prevTally != 1) {prevTally = 1; webSockets_returnTally(1);}
-//     } else {
-//         tallyScreen.fillRect(0,0,240,135, TFT_BLACK);
-//         if (prevTally != 0) {prevTally = 0; webSockets_returnTally(0);}
-//     }
     
     // Battery
     tallyScreen.setTextSize(1);
@@ -105,7 +88,7 @@ void refreshTallyScreen() {
     tallyScreen.setTextSize(9);
     tallyScreen.setCursor(10,80);
     tallyScreen.setTextColor(TFT_WHITE);
-    tallyScreen.print(friendlyName);
+    tallyScreen.print(g_config.device.friendlyName);
     
     tallyScreen.pushSprite(0,0);
     

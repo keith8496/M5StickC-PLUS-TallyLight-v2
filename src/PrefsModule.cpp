@@ -6,7 +6,7 @@
 #include "WebSocketsModule.h"
 
 
-WiFiManagerParameter wm_friendlyName("friendlyName", "Friendly Name");
+//WiFiManagerParameter wm_friendlyName("friendlyName", "Friendly Name");
 WiFiManagerParameter wm_nodeRED_ServerIP("nr_ServerIP", "Node-RED Server IP");
 WiFiManagerParameter wm_nodeRED_ServerPort("nr_ServerPort", "Node-RED Server Port");
 WiFiManagerParameter wm_nodeRED_ServerUrl("nr_ServerUrl", "Node-RED Server URL");
@@ -25,7 +25,7 @@ WiFiManagerParameter wm_mqtt_password("mqtt_password", "MQTT Password");
 Preferences preferences;
 char deviceId[DEVICE_ID_MAX_LEN + 1];
 char deviceName[DEVICE_NAME_MAX_LEN + 1];
-char friendlyName[FRIENDLY_NAME_MAX_LEN + 1];
+//char friendlyName[FRIENDLY_NAME_MAX_LEN + 1];
 char nodeRED_ServerIP[IP_STR_MAX_LEN + 1];
 char nodeRED_ServerUrl[URL_MAX_LEN + 1];
 char localTimeZone[TIMEZONE_MAX_LEN + 1];
@@ -43,10 +43,10 @@ char mqtt_password[32];
 void preferences_setup() {
     
     preferences.begin("custom", true);
-    snprintf(friendlyName, sizeof(friendlyName), "%s", preferences.getString("friendlyName", "CamX").c_str());
-    snprintf(nodeRED_ServerIP, sizeof(nodeRED_ServerIP), "%s", preferences.getString("nr_ServerIP", "172.16.30.54").c_str());
-    nodeRED_ServerPort = preferences.getInt("nr_ServerPort", 1880);
-    snprintf(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl), "%s", preferences.getString("nr_ServerUrl", "/ws/tally").c_str());
+    //snprintf(friendlyName, sizeof(friendlyName), "%s", preferences.getString("friendlyName", "CamX").c_str());
+    //snprintf(nodeRED_ServerIP, sizeof(nodeRED_ServerIP), "%s", preferences.getString("nr_ServerIP", "172.16.30.54").c_str());
+    //nodeRED_ServerPort = preferences.getInt("nr_ServerPort", 1880);
+    //snprintf(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl), "%s", preferences.getString("nr_ServerUrl", "/ws/tally").c_str());
     snprintf(localTimeZone, sizeof(localTimeZone), "%s", preferences.getString("localTimeZone", "America/Chicago").c_str());
     snprintf(ntpServer, sizeof(ntpServer), "%s", preferences.getString("ntpServer", "time.apple.com").c_str());
     batteryCapacity = preferences.getInt("batteryCapacity", 2200);
@@ -61,10 +61,10 @@ void preferences_setup() {
     preferences.end();
 
     // wm_addParameters
-    wm.addParameter(&wm_friendlyName);
-    wm.addParameter(&wm_nodeRED_ServerIP);
-    wm.addParameter(&wm_nodeRED_ServerPort);
-    wm.addParameter(&wm_nodeRED_ServerUrl);
+    //wm.addParameter(&wm_friendlyName);
+    //wm.addParameter(&wm_nodeRED_ServerIP);
+    //wm.addParameter(&wm_nodeRED_ServerPort);
+    //wm.addParameter(&wm_nodeRED_ServerUrl);
     wm.addParameter(&wm_ntpServer);
     wm.addParameter(&wm_localTimeZone);
     wm.addParameter(&wm_batteryCapacity);
@@ -78,13 +78,13 @@ void preferences_setup() {
     // set wm values
     constexpr size_t BUFF_MAX_LEN   = 32;
     char buff[BUFF_MAX_LEN + 1];
-    wm_friendlyName.setValue(friendlyName, sizeof(friendlyName));
+    //wm_friendlyName.setValue(friendlyName, sizeof(friendlyName));
     //ultoa(inputIds, buff, 2);
     //wm_inputIds.setValue(buff, sizeof(buff));
-    wm_nodeRED_ServerIP.setValue(nodeRED_ServerIP, sizeof(nodeRED_ServerIP));
-    itoa(nodeRED_ServerPort, buff, 10);
-    wm_nodeRED_ServerPort.setValue(buff, sizeof(buff));
-    wm_nodeRED_ServerUrl.setValue(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl));
+    //wm_nodeRED_ServerIP.setValue(nodeRED_ServerIP, sizeof(nodeRED_ServerIP));
+    //itoa(nodeRED_ServerPort, buff, 10);
+    //wm_nodeRED_ServerPort.setValue(buff, sizeof(buff));
+    //wm_nodeRED_ServerUrl.setValue(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl));
     wm_ntpServer.setValue(ntpServer, sizeof(ntpServer));
     wm_localTimeZone.setValue(localTimeZone, sizeof(localTimeZone));
     itoa(batteryCapacity, buff, 10);
@@ -105,10 +105,10 @@ void preferences_setup() {
 
 void preferences_save() {
     preferences.begin("custom", false);
-    preferences.putString("friendlyName", friendlyName);
-    preferences.putString("nr_ServerIP", nodeRED_ServerIP);
-    preferences.putInt("nr_ServerPort", nodeRED_ServerPort);
-    preferences.putString("nr_ServerUrl", nodeRED_ServerUrl);
+    //preferences.putString("friendlyName", friendlyName);
+    //preferences.putString("nr_ServerIP", nodeRED_ServerIP);
+    //preferences.putInt("nr_ServerPort", nodeRED_ServerPort);
+    //preferences.putString("nr_ServerUrl", nodeRED_ServerUrl);
     preferences.putString("ntpServer", ntpServer);
     preferences.putString("localTimeZone", localTimeZone);
     preferences.putInt("batteryCapacity", batteryCapacity);
@@ -125,10 +125,10 @@ void preferences_save() {
 
 void WiFi_onSaveParams() {
 
-    snprintf(friendlyName, sizeof(friendlyName), "%s", wm_friendlyName.getValue());
-    snprintf(nodeRED_ServerIP, sizeof(nodeRED_ServerIP), "%s", wm_nodeRED_ServerIP.getValue());
-    nodeRED_ServerPort = atoi(wm_nodeRED_ServerPort.getValue());
-    snprintf(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl), "%s", wm_nodeRED_ServerUrl.getValue());
+    //snprintf(friendlyName, sizeof(friendlyName), "%s", wm_friendlyName.getValue());
+    //snprintf(nodeRED_ServerIP, sizeof(nodeRED_ServerIP), "%s", wm_nodeRED_ServerIP.getValue());
+    //nodeRED_ServerPort = atoi(wm_nodeRED_ServerPort.getValue());
+    //snprintf(nodeRED_ServerUrl, sizeof(nodeRED_ServerUrl), "%s", wm_nodeRED_ServerUrl.getValue());
     snprintf(ntpServer, sizeof(ntpServer), "%s", wm_ntpServer.getValue());
     snprintf(localTimeZone, sizeof(localTimeZone), "%s", wm_localTimeZone.getValue());
     batteryCapacity = atoi(wm_batteryCapacity.getValue());
@@ -150,7 +150,7 @@ void WiFi_onSaveParams() {
 void prefs_applyToConfig(ConfigState& cfg) {
     // Per-device config
     cfg.device.deviceId            = String(deviceId);
-    cfg.device.friendlyName        = String(friendlyName);
+    //cfg.device.friendlyName        = String(friendlyName);
     cfg.device.batteryCapacityMah  = static_cast<uint16_t>(batteryCapacity);
 
     // Global power-saver config (from WiFi portal / prefs)

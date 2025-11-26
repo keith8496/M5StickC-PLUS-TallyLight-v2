@@ -9,6 +9,8 @@ static const char* TOPIC_ATEM_INPUTS  = "sanctuary/atem/inputs";
 static const char* TOPIC_GLOBAL_CONFIG_ROOT = "sanctuary/tally/config";
 static const char* TOPIC_ALL_CMD            = "sanctuary/tally/all/cmd";
 
+String g_tallyLabel;
+
 // ---------- Helpers -------------------------------------------------
 
 static String toLowerCopy(const String& in) {
