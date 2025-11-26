@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+#include <esp_task_wdt.h>
 #include <M5StickCPlus.h>
 #include <millisDelay.h>
 #include <WiFi.h>
@@ -130,6 +131,12 @@ void setup () {
         ms_tps.start(1000);
         ms_runningAvg.start(60000);
     #endif
+
+    // Init task watchdog: 10s timeout, panic = true (print backtrace & reset)
+    esp_task_wdt_init(60, true);
+    // Watch the current (Arduino) task
+    esp_task_wdt_add(NULL);
+    
 }
 
 void loop () {
@@ -205,6 +212,9 @@ void loop () {
     }
 
     refreshScreen();
+
+    // Feed the watchdog
+    esp_task_wdt_reset();
 
     #if TPS
         if (ms_tps.justFinished()) {
