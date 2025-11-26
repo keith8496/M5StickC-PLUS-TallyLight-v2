@@ -3,9 +3,7 @@
 
 #include "NetworkModule.h"
 #include "PowerModule.h"
-#include "PrefsModule.h"
 #include "ScreenModule.h"
-#include "WebSocketsModule.h"
 
 #include "ConfigState.h"
 #include "TallyState.h"
@@ -61,13 +59,13 @@ void refreshTallyScreen() {
     // --- Background color based on tally state ---
     if (isProgram) {
         tallyScreen.fillRect(0, 0, 240, 135, TFT_RED);
-        if (prevTally != 2) { prevTally = 2; webSockets_returnTally(2); }
+        // return mqtt
     } else if (isPreview) {
         tallyScreen.fillRect(0, 0, 240, 135, TFT_GREEN);
-        if (prevTally != 1) { prevTally = 1; webSockets_returnTally(1); }
+        // return mqtt
     } else {
         tallyScreen.fillRect(0, 0, 240, 135, TFT_BLACK);
-        if (prevTally != 0) { prevTally = 0; webSockets_returnTally(0); }
+        // return mqtt
     }
     
     // Battery
@@ -120,6 +118,10 @@ void refreshPowerScreen() {
 
 void refreshSetupScreen() {
 
+    String g_mqttServer = g_config.global.mqttServer;
+    uint16_t g_mqttPort = g_config.global.mqttPort;
+    bool g_mqtt_IsConnected = g_config.device.mqtt_isConnected;
+   
     String strTimeStatus;
     strTimeStatus.reserve(16);
     switch (timeStatus()) {
@@ -149,8 +151,8 @@ void refreshSetupScreen() {
     setupScreen.println("IP: " + WiFi.localIP().toString());
     setupScreen.println("NTP: " + strTimeStatus);
     setupScreen.println();
-    setupScreen.println("Node-RED Server: " + String(nodeRED_ServerIP) + ":" + String(nodeRED_ServerPort));
-    setupScreen.println("Connected: " + String(ws_isConnected));
+    setupScreen.println("MQTT Server: " + String(g_mqttServer) + ":" + String(g_mqttPort));
+    setupScreen.println("Connected: " + String(g_mqtt_IsConnected ? "Yes" : "No"));
     setupScreen.pushSprite(10,10);
 
 }
@@ -203,7 +205,6 @@ void changeScreen(int newScreen) {
             // tallyScreen
             tallyScreen.createSprite(tft_width, tft_heigth);
             tallyScreen.setRotation(3);
-            webSockets_getTally();
             break;
         case SCREEN_POWER:
             // powerScreen
