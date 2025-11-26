@@ -131,7 +131,7 @@ void MqttClient::ensureConnected() {
 }
 
 bool MqttClient::connectOnce() {
-    auto eff = _cfg.effective();
+    const auto eff = _cfg.effective();
 
     // Client ID = deviceId + random suffix
     String clientId = eff.deviceId + "-" + String((uint32_t)esp_random(), HEX);
@@ -162,7 +162,7 @@ bool MqttClient::connectOnce() {
 }
 
 void MqttClient::subscribeAll() {
-    auto eff = _cfg.effective();
+    const auto eff = _cfg.effective();
 
     // 1) ATEM topics (global)
     _mqtt->subscribe(TOPIC_ATEM_PREVIEW);

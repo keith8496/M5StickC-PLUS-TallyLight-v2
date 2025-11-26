@@ -2,7 +2,6 @@
 #include <millisDelay.h>
 #include "ConfigState.h"
 #include "NetworkModule.h"
-#include "PrefsModule.h"
 #include "ScreenModule.h"
 
 extern ConfigState g_config;
@@ -26,7 +25,7 @@ void WiFi_onLoop() {
 
 void WiFi_setup () {
 
-    auto eff = g_config.effective();
+    const auto eff = g_config.effective();
     String hostname = eff.deviceName.length() ? eff.deviceName : eff.deviceId;
 
     WiFi.mode(WIFI_STA);
