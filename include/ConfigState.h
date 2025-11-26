@@ -56,11 +56,13 @@ struct GlobalConfig {
 
 struct DeviceConfig {
     // Fixed identity for this build
-    String deviceId;          // e.g. "m5stick-7A90F3"
+    String deviceId;          // e.g. "7A90F3"
+    String deviceName;        // e.g. "m5stick-7A90F3"
 
     // Mutable from MQTT
     String friendlyName;      // e.g. "Camera 3 Left"
     uint8_t atemInput = 0;    // "3" in MQTT → 3
+    bool mqtt_isConnected;
 
     // Battery / SoC model
     uint16_t batteryCapacityMah = 2200; // SoC algorithm input
@@ -71,6 +73,7 @@ struct DeviceConfig {
 struct EffectiveConfig {
     // Identity
     String deviceId;
+    String deviceName;
     String friendlyName;
 
     // Network
@@ -97,6 +100,7 @@ struct EffectiveConfig {
 
     // Per-device
     uint8_t atemInput;
+    bool mqtt_isConnected;
     uint16_t batteryCapacityMah;
 
     // Logging
@@ -113,6 +117,7 @@ struct ConfigState {
         EffectiveConfig e;
 
         e.deviceId = device.deviceId;
+        e.deviceName = device.deviceName;
         e.friendlyName = device.friendlyName.length() ? device.friendlyName : device.deviceId;
 
         e.wifiSsid       = global.wifiSsid;
@@ -135,6 +140,7 @@ struct ConfigState {
         e.statusIntervalSec = global.statusIntervalSec;
 
         e.atemInput          = device.atemInput;
+        e.mqtt_isConnected   = device.mqtt_isConnected;
         e.batteryCapacityMah = device.batteryCapacityMah;
 
         e.logLevel = global.logLevel;

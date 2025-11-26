@@ -29,5 +29,3 @@ extern power pwr;
 
 void power_setup();
 void power_onLoop();
-
-void prefs_applyToConfig(ConfigState& cfg);

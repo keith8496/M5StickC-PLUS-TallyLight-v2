@@ -4,6 +4,8 @@
 
 #include "MqttClient.h"
 
+extern ConfigState g_config;
+
 // --- Constants ------------------------------------------------
 
 static const char* TOPIC_ATEM_PREVIEW   = "sanctuary/atem/preview";
@@ -49,6 +51,7 @@ void MqttClient::loop() {
     }
 
     if (!_connected) {
+        g_config.device.mqtt_isConnected = false;
         uint32_t now = millis();
         if (now - _lastReconnectAttemptMs > RECONNECT_INTERVAL_MS) {
             _lastReconnectAttemptMs = now;
@@ -110,10 +113,6 @@ void MqttClient::setupClient() {
     _wifiClient = new WiFiClient();
     _mqtt = new PubSubClient(*_wifiClient);
 
-    // ❌ Don't use a temporary EffectiveConfig here
-    // auto eff = _cfg.effective();
-    // _mqtt->setServer(eff.mqttServer.c_str(), eff.mqttPort);
-
     // ✅ Use the underlying persistent config instead
     _mqtt->setServer(_cfg.global.mqttServer.c_str(), _cfg.global.mqttPort);
     _mqtt->setCallback(&MqttClient::_mqttCallbackThunk);
@@ -124,6 +123,7 @@ void MqttClient::ensureConnected() {
 
     if (connectOnce()) {
         _connected = true;
+        g_config.device.mqtt_isConnected = true;
         subscribeAll();
         publishAvailability("online");
         publishLog("MQTT connected");
