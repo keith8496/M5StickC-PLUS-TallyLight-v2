@@ -1,10 +1,14 @@
-#include "PowerModule.h"
-#include <millisDelay.h>
-#include "RunningAverage.h"
-#include "PrefsModule.h"
 #include <M5StickCPlus.h>
-#include "ScreenModule.h"
+#include <millisDelay.h>
+#include <RunningAverage.h>
 
+#include "ScreenModule.h"
+#include "ConfigState.h"
+#include "PowerModule.h"
+
+
+extern int currentBrightness;
+extern ConfigState g_config;
 
 power pwr;
 
@@ -78,7 +82,8 @@ float getBatPercentageVoltage(float voltage) {
 }
 
 float getBatPercentageCoulomb() {
-  const float bat = (batteryCapacity + pwr.coulombCount) / batteryCapacity * 100;
+  const uint16_t g_batteryCapacity = g_config.device.batteryCapacityMah;
+  const float bat = (g_batteryCapacity + pwr.coulombCount) / g_batteryCapacity * 100;
   if (bat > 100.0) {
     return 100.0;
   } else if (bat < 0.0) {
@@ -155,6 +160,9 @@ void doPowerManagement() {
   const int md_chargeToOff_milliseconds = 60000;
   static millisDelay md_chargeToOff;
   static millisDelay md_lowBattery;
+  u_int16_t g_batteryCapacity = g_config.device.batteryCapacityMah;
+  const uint8_t g_powersaverBrightness = g_config.global.powersaverBrightness;
+  const uint8_t g_powersaverBatteryPct = g_config.global.powersaverBatteryPct;
 
   const bool isBatWarningLevel = M5.Axp.GetWarningLevel();
     if (isBatWarningLevel) {
@@ -263,18 +271,18 @@ void doPowerManagement() {
     if (isBatWarningLevel) {
       const char* mode = "Low Battery";
       snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
-      pwr.maxBrightness = pmPowerSaverBright;
+      pwr.maxBrightness = g_powersaverBrightness;
       if (md_lowBattery.justFinished()) {
         md_lowBattery.repeat();
-        batteryCapacity = pwr.coulombCount*(-1);
-        preferences_save();
+        g_batteryCapacity = pwr.coulombCount*(-1);
+        //preferences_save();
       } else if (!md_lowBattery.isRunning()) {
         md_lowBattery.start(60000);
       }
-    } else if (floor(pwr.batPercentageMin) <= pmPowerSaverBatt) {
+    } else if (floor(pwr.batPercentageMin) <= g_powersaverBatteryPct) {
       const char* mode = "Power Saver";
       snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
-      pwr.maxBrightness = pmPowerSaverBright;
+      pwr.maxBrightness = g_powersaverBrightness;
       if (currentBrightness > pwr.maxBrightness) setBrightness(pwr.maxBrightness);
     } else {
       const char* mode = "Balanced";

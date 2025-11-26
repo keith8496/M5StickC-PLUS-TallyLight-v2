@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+#include <esp_task_wdt.h>
 #include <M5StickCPlus.h>
 #include <millisDelay.h>
 #include <WiFi.h>
@@ -8,7 +9,6 @@
 #include "NetworkModule.h"
 #include "PrefsModule.h"
 #include "PowerModule.h"
-#include "WebSocketsModule.h"
 
 #include "ConfigState.h"
 #include "TallyState.h"
@@ -72,13 +72,19 @@ void setup () {
     currentBrightness = 50;
     setBrightness(currentBrightness);
 
-    // Set deviceId and deviceName
+    // Set deviceId and friendly deviceName
     uint8_t macAddress[6];
     WiFi.macAddress(macAddress);
-    snprintf(deviceId, sizeof(deviceId),
-         "%02X%02X%02X", macAddress[3], macAddress[4], macAddress[5]);
-    snprintf(deviceName, sizeof(deviceName),
-         "M5StickC-Plus-%s", deviceId);
+
+    // Build deviceId from last 3 bytes of MAC
+    g_config.device.deviceId = String(macAddress[3], HEX) +
+                               String(macAddress[4], HEX) +
+                               String(macAddress[5], HEX);
+
+    g_config.device.deviceId.toUpperCase();
+
+    // Build deviceName
+    g_config.device.deviceName = "M5StickC-Plus-" + g_config.device.deviceId;
     
     changeScreen(0);
     startupLog("Starting...", 1);
@@ -89,12 +95,12 @@ void setup () {
     startupLog("Initializing WiFi...", 1);
     WiFi_setup();
     ms_startup.start(30000);
-    startupLog("Waiting for MQTT...", 1);
-
+    prefs_applyToConfig(g_config);
+    
     // --- Initialize MQTT ---
     g_bootMillis = millis();
-    prefs_applyToConfig(g_config);
     g_mqtt.setMessageHandler(onMqttMessage);
+    startupLog("Initializing MQTT...", 1);
     g_mqtt.begin();
 
     while (ms_startup.isRunning()) {
@@ -125,6 +131,12 @@ void setup () {
         ms_tps.start(1000);
         ms_runningAvg.start(60000);
     #endif
+
+    // Init task watchdog: 10s timeout, panic = true (print backtrace & reset)
+    esp_task_wdt_init(60, true);
+    // Watch the current (Arduino) task
+    esp_task_wdt_add(NULL);
+    
 }
 
 void loop () {
@@ -132,7 +144,7 @@ void loop () {
     M5.update();
     events();               // ezTime
     WiFi_onLoop();
-    webSockets_onLoop();
+    //webSockets_onLoop();
     power_onLoop();
 
     // Begin New MQTT Stuff
@@ -200,6 +212,9 @@ void loop () {
     }
 
     refreshScreen();
+
+    // Feed the watchdog
+    esp_task_wdt_reset();
 
     #if TPS
         if (ms_tps.justFinished()) {

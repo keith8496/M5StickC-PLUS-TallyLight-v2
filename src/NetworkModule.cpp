@@ -1,8 +1,10 @@
-#include "NetworkModule.h"
-#include <millisDelay.h>
-#include "ScreenModule.h"
-#include "PrefsModule.h"
 #include <M5StickCPlus.h>
+#include <millisDelay.h>
+#include "ConfigState.h"
+#include "NetworkModule.h"
+#include "ScreenModule.h"
+
+extern ConfigState g_config;
 
 WiFiManager wm;
 millisDelay ms_WiFi;
@@ -23,6 +25,9 @@ void WiFi_onLoop() {
 
 void WiFi_setup () {
 
+    const auto eff = g_config.effective();
+    String hostname = eff.deviceName.length() ? eff.deviceName : eff.deviceId;
+
     WiFi.mode(WIFI_STA);
     WiFi.onEvent(WiFi_onEvent);
     WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
@@ -36,11 +41,11 @@ void WiFi_setup () {
     wm.setSaveParamsCallback(WiFi_onSaveParams);
     wm.setClass("invert");                          // set dark theme
     wm.setCountry("US");
-    wm.setHostname(deviceName);
+    wm.setHostname(hostname.c_str());
     wm.setWiFiAutoReconnect(true);
     wm.setRemoveDuplicateAPs(false);
     
-    if (!wm.autoConnect(deviceName)) {
+    if (!wm.autoConnect(hostname.c_str())) {
         if (currentScreen == SCREEN_STARTUP) {
             startupLog("No access point found!",1);
             startupLog("Config Portal Started.\r\nPress M5 to abort.",1);
@@ -56,9 +61,9 @@ void WiFi_setup () {
 
     // ezTime
     if (currentScreen == SCREEN_STARTUP) startupLog("Initializing ezTime...", 1);
-    if (!localTime.setCache("timezone", "localTime")) localTime.setLocation(localTimeZone);
+    if (!localTime.setCache("timezone", "localTime")) localTime.setLocation(eff.timezone.c_str());
     localTime.setDefault();
-    setServer(ntpServer);
+    setServer(eff.ntpServer.c_str());
     if (wm.getWLStatusString() != "WL_CONNECTED") {
         if (currentScreen == SCREEN_STARTUP) startupLog("ezTime initialization incomplete...", 1);
         return;
