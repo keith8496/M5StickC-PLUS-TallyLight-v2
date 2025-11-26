@@ -44,7 +44,7 @@ void refreshTallyScreen() {
 
     // --- Determine this device's ATEM input ID ---
     // EffectiveConfig merges global + device config
-    EffectiveConfig eff = g_config.effective();
+    const auto eff = g_config.effective();
     uint8_t myInput = eff.atemInput;
 
     // If no input is configured yet, treat as idle & just show UI
@@ -86,7 +86,7 @@ void refreshTallyScreen() {
     tallyScreen.setTextSize(9);
     tallyScreen.setCursor(10,80);
     tallyScreen.setTextColor(TFT_WHITE);
-    tallyScreen.print(g_config.device.friendlyName);
+    tallyScreen.print(eff.friendlyName);
     
     tallyScreen.pushSprite(0,0);
     
@@ -118,9 +118,7 @@ void refreshPowerScreen() {
 
 void refreshSetupScreen() {
 
-    String g_mqttServer = g_config.global.mqttServer;
-    uint16_t g_mqttPort = g_config.global.mqttPort;
-    bool g_mqtt_IsConnected = g_config.device.mqtt_isConnected;
+    const auto eff = g_config.effective();
    
     String strTimeStatus;
     strTimeStatus.reserve(16);
@@ -151,8 +149,8 @@ void refreshSetupScreen() {
     setupScreen.println("IP: " + WiFi.localIP().toString());
     setupScreen.println("NTP: " + strTimeStatus);
     setupScreen.println();
-    setupScreen.println("MQTT Server: " + String(g_mqttServer) + ":" + String(g_mqttPort));
-    setupScreen.println("Connected: " + String(g_mqtt_IsConnected ? "Yes" : "No"));
+    setupScreen.println("MQTT Server: " + String(eff.mqttServer) + ":" + String(eff.mqttPort));
+    setupScreen.println("Connected: " + String(eff.mqtt_isConnected ? "Yes" : "No"));
     setupScreen.pushSprite(10,10);
 
 }
