@@ -1,5 +1,6 @@
-#include <M5StickCPlus.h>
+#include <M5Unified.h>
 #include <millisDelay.h>
+
 #include "ConfigState.h"
 #include "NetworkModule.h"
 #include "ScreenModule.h"
