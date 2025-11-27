@@ -1,7 +1,6 @@
 #include <Arduino.h>
-
 #include <esp_task_wdt.h>
-#include <M5StickCPlus.h>
+#include <M5Unified.h>
 #include <millisDelay.h>
 #include <WiFi.h>
 
@@ -60,12 +59,37 @@ void onMqttMessage(const String& topic, const String& payload) {
     Serial.printf("[MQTT] %s => %s\n", topic.c_str(), payload.c_str());
 }
 
+void cycleBrightness() {
+    // Discrete brightness levels we cycle through
+    static const int levels[] = {10, 30, 50, 80, 100};
+    static const size_t numLevels = sizeof(levels) / sizeof(levels[0]);
+
+    // Find the nearest level at or above the current setting
+    size_t idx = 0;
+    for (; idx < numLevels; ++idx) {
+        if (currentBrightness <= levels[idx]) {
+            break;
+        }
+    }
+
+    // Advance to the next level (wrap at the end)
+    idx = (idx + 1) % numLevels;
+
+    currentBrightness = levels[idx];
+    setBrightness(currentBrightness);
+}
 
 void setup () {
 
     Serial.begin(115200);
-    M5.begin();
-    M5.Lcd.setRotation(3);
+
+    // Initialize M5Unified for M5StickC-Plus
+    auto cfg = M5.config();
+    // Default config is usually fine for StickC-Plus; tweak here if needed later.
+    M5.begin(cfg);
+
+    // Use M5Unified display API
+    M5.Display.setRotation(1);
     setCpuFrequencyMhz(80); //Save battery by turning down the CPU clock
     btStop();               //Save battery by turning off Bluetooth
 
@@ -200,15 +224,21 @@ void loop () {
     }
     // End New MQTT Stuff
 
-    // M5 Button
-    if (M5.BtnA.wasReleased()) {
-        changeScreen(-1);
+    // Button A: cycle through ATEM inputs (placeholder for now)
+    if (M5.BtnA.wasClicked()) {
+        // TODO: wire this up to real input selection state in ConfigState/TallyState
+        Serial.println("BtnA released -> would cycle ATEM input (not wired yet)");
     }
 
-    // Action Button
-    if (M5.BtnB.wasReleased()) {
-        int newBrightness = currentBrightness + 10;
-        setBrightness(newBrightness);
+    // Button B:
+    //   - long press (hold) -> change screens
+    //   - short press (click) -> cycle brightness
+    if (M5.BtnB.wasHold()) {
+        Serial.println("BtnB long press -> changeScreen(-1)");
+        changeScreen(-1);
+    } else if (M5.BtnB.wasClicked()) {
+        Serial.println("BtnB click -> cycleBrightness()");
+        cycleBrightness();
     }
 
     refreshScreen();

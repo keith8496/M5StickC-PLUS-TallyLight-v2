@@ -1,5 +1,5 @@
+#include <M5Unified.h>
 #include <millisDelay.h>
-#include <M5StickCPlus.h>
 
 #include "NetworkModule.h"
 #include "PowerModule.h"
@@ -23,10 +23,10 @@ int currentBrightness = 50;     // default to 50%
 const int tft_width = 240;
 const int tft_heigth = 135;
 
-TFT_eSprite startupScreen = TFT_eSprite(&M5.Lcd);
-TFT_eSprite tallyScreen = TFT_eSprite(&M5.Lcd);
-TFT_eSprite powerScreen = TFT_eSprite(&M5.Lcd);
-TFT_eSprite setupScreen = TFT_eSprite(&M5.Lcd);
+LGFX_Sprite startupScreen(&M5.Display);
+LGFX_Sprite tallyScreen(&M5.Display);
+LGFX_Sprite powerScreen(&M5.Display);
+LGFX_Sprite setupScreen(&M5.Display);
 
 constexpr size_t LOG_MESSAGE_MAX_LEN     = 64;
 struct startupLogData {
@@ -83,7 +83,7 @@ void refreshTallyScreen() {
 
     
     // Friendly Name
-    tallyScreen.setTextSize(9);
+    tallyScreen.setTextSize(8);
     tallyScreen.setCursor(10,80);
     tallyScreen.setTextColor(TFT_WHITE);
     tallyScreen.print(eff.friendlyName);
@@ -189,34 +189,34 @@ void changeScreen(int newScreen) {
     setupScreen.deleteSprite();
     
     // clearScreen
-    M5.Lcd.fillScreen(TFT_BLACK);
-    M5.Lcd.setTextSize(1);
-    M5.Lcd.setCursor(0,0);
+    M5.Display.fillScreen(TFT_BLACK);
+    M5.Display.setTextSize(1);
+    M5.Display.setCursor(0, 0);
 
     switch (currentScreen) {
         case SCREEN_STARTUP:
             // startupScreen
             startupScreen.createSprite(tft_width-5, tft_heigth-5);
-            startupScreen.setRotation(3);
+            // startupScreen.setRotation(3);
             break;
         case SCREEN_TALLY:
             // tallyScreen
             tallyScreen.createSprite(tft_width, tft_heigth);
-            tallyScreen.setRotation(3);
+            // tallyScreen.setRotation(3);
             break;
         case SCREEN_POWER:
             // powerScreen
             powerScreen.createSprite(tft_width, tft_heigth);
-            powerScreen.setRotation(3);
+            // powerScreen.setRotation(3);
             break;
         case SCREEN_SETUP:
             // setupScreen
             if (!wm.getWebPortalActive()) wm.startWebPortal();
             setupScreen.createSprite(tft_width, tft_heigth);
-            setupScreen.setRotation(3);
+            // setupScreen.setRotation(3);
             break;
         default:
-            M5.Lcd.println("Invalid Screen!");
+            M5.Display.println("Invalid Screen!");
             break; 
     }
 
@@ -258,13 +258,17 @@ void setBrightness(int newBrightness) {
         newBrightness = minBrightness;
     }
     if (newBrightness > pwr.maxBrightness) {
-        newBrightness = minBrightness; // wrap to min if exceeding max
+        // wrap back to minimum if exceeding configured max
+        newBrightness = minBrightness;
     }
 
     currentBrightness = newBrightness;
 
-    // On M5StickC-Plus, ScreenBreath expects 0–100.
-    M5.Axp.ScreenBreath(currentBrightness);
+    // M5Unified: brightness is 0–255 on M5.Display
+    std::uint8_t hwBrightness = static_cast<std::uint8_t>(
+        (currentBrightness <= 0) ? 0 : (currentBrightness * 255) / 100
+    );
+    M5.Display.setBrightness(hwBrightness);
 }
 
 

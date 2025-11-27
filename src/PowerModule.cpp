@@ -1,6 +1,9 @@
-#include <M5StickCPlus.h>
+#include <M5Unified.h>
 #include <millisDelay.h>
 #include <RunningAverage.h>
+
+// Enable power debugging logs
+//#define DEBUG_POWER
 
 #include "ScreenModule.h"
 #include "ConfigState.h"
@@ -17,6 +20,84 @@ static millisDelay md_power;
 //static millisDelay md_chargeControlWait;
 static const int runningAvgCnt = 200;
 static RunningAverage ravg_batVoltage(runningAvgCnt);
+
+// --- AXP192 helpers on top of M5Unified --------------------------------------
+//
+// We mirror just enough of the original M5StickC AXP192 API to keep the old
+// power logic working, but implemented in terms of M5.Power.Axp192.
+//
+static inline uint8_t axpRead8(uint8_t addr) {
+    return M5.Power.Axp192.readRegister8(addr);
+}
+
+static inline void axpWrite8(uint8_t addr, uint8_t data) {
+    M5.Power.Axp192.writeRegister8(addr, data);
+}
+
+static inline uint32_t axpRead32(uint8_t addr) {
+    // AXP192 32-bit counters are stored big-endian across four consecutive
+    // registers. We reconstruct the 32-bit value manually using the public
+    // 8-bit accessor.
+    uint32_t value = 0;
+    value |= static_cast<uint32_t>(axpRead8(addr))     << 24;
+    value |= static_cast<uint32_t>(axpRead8(addr + 1)) << 16;
+    value |= static_cast<uint32_t>(axpRead8(addr + 2)) << 8;
+    value |= static_cast<uint32_t>(axpRead8(addr + 3));
+    return value;
+}
+
+// Coulomb-counter control (based on the old AXP192::Enable/ Clear /GetCoulombData)
+static void axpEnableCoulombCounter() {
+    // 0xB8: Coulomb counter control; bit7 = enable
+    axpWrite8(0xB8, 0x80);
+}
+
+static void axpClearCoulombCounter() {
+    // Set the clear flag (bit5) in 0xB8 while preserving other bits.
+    uint8_t reg = axpRead8(0xB8);
+    axpWrite8(0xB8, reg | 0x20);
+}
+
+static uint32_t axpGetCoulombChargeRaw() {
+    // 0xB0–0xB3: charge coulomb counter (32-bit)
+    return axpRead32(0xB0);
+}
+
+static uint32_t axpGetCoulombDischargeRaw() {
+    // 0xB4–0xB7: discharge coulomb counter (32-bit)
+    return axpRead32(0xB4);
+}
+
+// Net coulomb value in mAh, same formula as original AXP192::GetCoulombData.
+static float axpGetCoulombNet_mAh() {
+    uint32_t coin  = axpGetCoulombChargeRaw();
+    uint32_t coout = axpGetCoulombDischargeRaw();
+
+    uint32_t diff;
+    bool negative = false;
+
+    if (coin >= coout) {
+        diff = coin - coout;
+    } else {
+        diff     = coout - coin;
+        negative = true;
+    }
+
+    // From original AXP192 formula:
+    //   c[mAh] = 65536 * current_LSB[mA] * (coin - coout) / 3600 / ADC_rate[Hz]
+    // For AXP192: current_LSB = 0.5mA. We assume ADC_rate = 200Hz here.
+    constexpr float currentLSB_mA = 0.5f;
+    constexpr float adcRateHz     = 200.0f;
+
+    float c_mAh = (65536.0f * currentLSB_mA * static_cast<float>(diff))
+                  / 3600.0f / adcRateHz;
+
+    if (negative) {
+        c_mAh = -c_mAh;
+    }
+    return c_mAh;
+}
+// ---------------------------------------------------------------------------
 
 static const int chargeControlSteps = 9;
 static const uint8_t chargeControlArray[chargeControlSteps] = {0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8};
@@ -102,7 +183,7 @@ float getBatPercentageCoulomb() {
 }*/
 
 int getChargeCurrent() {
-  const uint8_t chargeControlNow = M5.Axp.Read8bit(0x33);
+  const uint8_t chargeControlNow = axpRead8(0x33);
   for (int i = 0; i < chargeControlSteps; i++) {
     if (chargeControlNow == chargeControlArray[i]) {
       return chargeCurrentArray[i];
@@ -132,7 +213,7 @@ int getChargeCurrent() {
     }
   }
   
-  M5.Axp.Write1Byte(0x33, reqChargeControl);
+  axpWrite8(0x33, reqChargeControl);
   pwr.maxChargeCurrent = getChargeCurrent();
   md_chargeControlWait.start(20000);
 
@@ -140,9 +221,12 @@ int getChargeCurrent() {
 
 
 void power_setup() {
-  M5.Axp.EnableCoulombcounter();
+  // Start the AXP192 coulomb counter and clear it so net mAh starts from 0.
+  axpEnableCoulombCounter();
+  axpClearCoulombCounter();
+
   doPowerManagement();
-  ravg_batVoltage.fillValue(M5.Axp.GetBatVoltage(),runningAvgCnt);
+  ravg_batVoltage.fillValue(M5.Power.Axp192.getBatteryVoltage(), runningAvgCnt);
   md_power.start(md_power_milliseconds);
 }
 
@@ -164,31 +248,43 @@ void doPowerManagement() {
   const uint8_t g_powersaverBrightness = g_config.global.powersaverBrightness;
   const uint8_t g_powersaverBatteryPct = g_config.global.powersaverBatteryPct;
 
-  const bool isBatWarningLevel = M5.Axp.GetWarningLevel();
-    if (isBatWarningLevel) {
-      const char* warning = "LOW BATTERY";
-      snprintf(pwr.batWarningLevel, sizeof(pwr.batWarningLevel), "%s", warning);
-    } else {
-      const char* warning = "";
-      snprintf(pwr.batWarningLevel, sizeof(pwr.batWarningLevel), "%s", warning);
-    }
-  
-  pwr.batVoltage = M5.Axp.GetBatVoltage();
+  // Battery voltage and warning level (approximate low-voltage threshold).
+  pwr.batVoltage = M5.Power.Axp192.getBatteryVoltage();
   ravg_batVoltage.addValue(pwr.batVoltage);
-  
-  pwr.batPercentage = getBatPercentageCoulomb();
+
+  const bool isBatWarningLevel = (pwr.batVoltage <= 3.40f);
+  if (isBatWarningLevel) {
+    const char* warning = "LOW BATTERY";
+    snprintf(pwr.batWarningLevel, sizeof(pwr.batWarningLevel), "%s", warning);
+  } else {
+    const char* warning = "";
+    snprintf(pwr.batWarningLevel, sizeof(pwr.batWarningLevel), "%s", warning);
+  }
+
+  pwr.batPercentage    = getBatPercentageCoulomb();
   pwr.batPercentageMin = getBatPercentageVoltage(ravg_batVoltage.getMinInBuffer());
   pwr.batPercentageMax = getBatPercentageVoltage(ravg_batVoltage.getMaxInBuffer());
-  pwr.batCurrent = M5.Axp.GetBatCurrent();
-  pwr.batChargeCurrent = M5.Axp.GetBatChargeCurrent();
+
+  // Approximate net battery current from separate charge / discharge readings.
+  float charge_mA    = M5.Power.Axp192.getBatteryChargeCurrent();
+  float discharge_mA = M5.Power.Axp192.getBatteryDischargeCurrent();
+  pwr.batChargeCurrent = charge_mA;
+  pwr.batCurrent       = charge_mA - discharge_mA;  // positive = net charging
+
   pwr.maxChargeCurrent = getChargeCurrent();
-  pwr.vbusVoltage = M5.Axp.GetVBusVoltage();
-  pwr.vbusCurrent = M5.Axp.GetVBusCurrent();
-  pwr.vinVoltage = M5.Axp.GetVinVoltage();
-  pwr.vinCurrent = M5.Axp.GetVinCurrent();
-  pwr.apsVoltage = M5.Axp.GetAPSVoltage();
-  pwr.tempInAXP192 = M5.Axp.GetTempInAXP192();
-  pwr.coulombCount = M5.Axp.GetCoulombData();
+
+  pwr.vbusVoltage = M5.Power.Axp192.getVBUSVoltage();
+  pwr.vbusCurrent = M5.Power.Axp192.getVBUSCurrent();
+
+  // In M5Unified, "VIN" is effectively ACIN (barrel power) on AXP192.
+  pwr.vinVoltage = M5.Power.Axp192.getACINVoltage();
+  pwr.vinCurrent = M5.Power.Axp192.getACINCurrent();
+
+  pwr.apsVoltage   = M5.Power.Axp192.getAPSVoltage();
+  pwr.tempInAXP192 = M5.Power.Axp192.getInternalTemperature();
+
+  // Net battery coulomb count in mAh (positive = net charge in, negative = net discharge).
+  pwr.coulombCount = axpGetCoulombNet_mAh();
   //pwr.batPercentageCoulomb = getBatPercentageCoulomb();
 
 
@@ -214,7 +310,7 @@ void doPowerManagement() {
     }*/
 
     if (pwr.maxChargeCurrent != 780) {
-      M5.Axp.Write1Byte(0x33, 0xc8);
+      axpWrite8(0x33, 0xc8);
     }
 
     
@@ -229,8 +325,8 @@ void doPowerManagement() {
       // Charge to Off
       
       if (md_chargeToOff.justFinished()) {
-        M5.Axp.ClearCoulombcounter();
-        M5.Axp.PowerOff();
+        axpClearCoulombCounter();
+        M5.Power.powerOff();
       }
 
       if (!md_chargeToOff.isRunning() && pwr.batVoltage >= 3.99 && floor(pwr.batChargeCurrent) == 0) {
@@ -258,14 +354,14 @@ void doPowerManagement() {
     pwr.maxBrightness = 100;
     
     if (pwr.maxChargeCurrent != 100) {
-      M5.Axp.Write1Byte(0x33, 0xc0);
+      axpWrite8(0x33, 0xc0);
     }
 
   } else {                              // 3v Battery
 
     md_chargeToOff.stop();
     if (pwr.maxChargeCurrent != 100) {
-      M5.Axp.Write1Byte(0x33, 0xc0);
+      axpWrite8(0x33, 0xc0);
     }
 
     if (isBatWarningLevel) {
@@ -274,8 +370,11 @@ void doPowerManagement() {
       pwr.maxBrightness = g_powersaverBrightness;
       if (md_lowBattery.justFinished()) {
         md_lowBattery.repeat();
-        g_batteryCapacity = pwr.coulombCount*(-1);
-        //preferences_save();
+        // Coulomb counting is available again, but automatic capacity
+        // recalibration can be risky. Leave this disabled for now until
+        // behaviour is validated in the field.
+        // g_batteryCapacity = pwr.coulombCount * (-1);
+        // preferences_save();
       } else if (!md_lowBattery.isRunning()) {
         md_lowBattery.start(60000);
       }
@@ -292,4 +391,21 @@ void doPowerManagement() {
 
   }
 
+  #ifdef DEBUG_POWER
+  Serial.printf(
+      "[POWER] Vbat=%.3fV  Vbus=%.3fV  Vin=%.3fV  Icharge=%.1fmA  Idischarge=%.1fmA  "
+      "Inet=%.1fmA  Coulomb=%.2fmAh  SoC=%.1f%%  Mode=%s  Bright=%d/%d\n",
+      pwr.batVoltage,
+      pwr.vbusVoltage,
+      pwr.vinVoltage,
+      pwr.batChargeCurrent,
+      (pwr.batChargeCurrent - pwr.batCurrent),   // discharge estimate
+      pwr.batCurrent,
+      pwr.coulombCount,
+      pwr.batPercentage,
+      pwr.powerMode,
+      currentBrightness,
+      pwr.maxBrightness
+  );
+  #endif
 }
