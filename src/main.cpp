@@ -98,7 +98,7 @@ void setup () {
     // Build deviceName
     g_config.device.deviceName = "M5StickC-Plus-" + g_config.device.deviceId;
     
-    changeScreen(0);
+    changeScreen(SCREEN_STARTUP);
     startupLog("Starting...", 1);
     startupLog("Initializing preferences...", 1);
     preferences_setup();
@@ -138,7 +138,7 @@ void setup () {
       
     startupLog("", 1);
     //startupLog("Press \"M5\" button \r\nto continue.", 2);
-    changeScreen(-1);
+    changeScreen(SCREEN_TALLY);
 
 
     #if TPS

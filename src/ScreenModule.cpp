@@ -486,6 +486,21 @@ void changeScreen(int newScreen) {
 }
 
 
+void toggleMainTab() {
+    if (currentScreen == SCREEN_TALLY) {
+        changeScreen(SCREEN_POWER);   // Diagnostics tab
+    } else if (currentScreen == SCREEN_POWER) {
+        changeScreen(SCREEN_SETUP);   // Scren Setup tab
+    } else {
+        // If we're in Startup/Setup and user hits B, just go to Tally.
+        changeScreen(SCREEN_TALLY);
+    }
+}
+
+
+
+
+
 void refreshScreen() {
 
     // Limit to 30 FPS
@@ -512,7 +527,7 @@ void refreshScreen() {
 }
 
 
-static const int minBrightness = 10;
+static const int minBrightness = 20;
 void setBrightness(int newBrightness) {
     if (newBrightness < minBrightness) {
         newBrightness = minBrightness;
