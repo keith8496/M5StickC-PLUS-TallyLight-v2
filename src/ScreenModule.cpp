@@ -1,5 +1,5 @@
+#include <M5Unified.h>
 #include <millisDelay.h>
-#include <M5StickCPlus.h>
 
 #include "NetworkModule.h"
 #include "PowerModule.h"
@@ -7,9 +7,11 @@
 
 #include "ConfigState.h"
 #include "TallyState.h"
+#include "MqttClient.h"
 
 extern ConfigState g_config;
 extern TallyState  g_tally;
+extern MqttClient g_mqtt;
 
 millisDelay md_screenRefresh;
 
@@ -23,10 +25,10 @@ int currentBrightness = 50;     // default to 50%
 const int tft_width = 240;
 const int tft_heigth = 135;
 
-TFT_eSprite startupScreen = TFT_eSprite(&M5.Lcd);
-TFT_eSprite tallyScreen = TFT_eSprite(&M5.Lcd);
-TFT_eSprite powerScreen = TFT_eSprite(&M5.Lcd);
-TFT_eSprite setupScreen = TFT_eSprite(&M5.Lcd);
+LGFX_Sprite startupScreen(&M5.Display);
+LGFX_Sprite tallyScreen(&M5.Display);
+LGFX_Sprite powerScreen(&M5.Display);
+LGFX_Sprite setupScreen(&M5.Display);
 
 constexpr size_t LOG_MESSAGE_MAX_LEN     = 64;
 struct startupLogData {
@@ -37,59 +39,318 @@ struct startupLogData {
 startupLogData startupLogEntries[20];
 int index_startupLog = -1;
 
-int prevTally = 0;
 
 
 void refreshTallyScreen() {
 
-    // --- Determine this device's ATEM input ID ---
     // EffectiveConfig merges global + device config
     const auto eff = g_config.effective();
-    uint8_t myInput = eff.atemInput;
 
-    // If no input is configured yet, treat as idle & just show UI
+    // Black strip across the top to keep status elements readable
+    const int statusBarHeight = 50;  // taller bar for two rows of info
+    tallyScreen.fillRect(0, 0, tft_width, statusBarHeight, TFT_BLACK);
+
+    // Use smallest FreeSans font for the status bar
+    tallyScreen.setFont(&fonts::DejaVu12);
+    tallyScreen.setTextSize(1);
+    
+    // --- Status Bar: Battery, WiFi, MQTT, Clock ---
+    const int statusY = 4;
+    int fontHeight = tallyScreen.fontHeight();
+
+    // Define two rows within the taller status bar:
+    // Row 0: clock + WiFi + MQTT + battery
+    // Row 1: SEL label (left side)
+    int row0Y = statusY + 2;                 // top row baseline area
+    int row1Y = statusY + fontHeight + 8;    // second row, SEL row
+
+    // Divide the status bar width into 8 segments:
+    // Clock spans 4 segments (0–3), WiFi spans 1 (4), MQTT spans 1 (5), Battery spans 2 (6–7).
+    int segWidth8     = tft_width / 8;
+    // Clock center: middle of segments 0–3
+    int clockCenterX  = 2 * segWidth8;
+    // WiFi center: middle of segment 4
+    int wifiCenterX   = (4 * segWidth8 + segWidth8 / 2) -4; // shift left 1px for better centering
+    // MQTT center: middle of segment 5
+    int mqttCenterX   = (5 * segWidth8 + segWidth8 / 2) -4; // shift left 1px for better centering
+    // Battery center: middle of segments 6–7
+    int batCenterX    = 7 * segWidth8;
+
+    // Clock (first segment, centered, on the top row)
+    auto now = localTime.dateTime("g:i:s A");
+    String timeStr = now ? String(now) : String("--:--:--");
+    tallyScreen.setTextColor(TFT_WHITE, TFT_BLACK);
+    int16_t timeWidth = tallyScreen.textWidth(timeStr);
+    int16_t timeX = clockCenterX - (timeWidth / 2);
+    if (timeX < 0) timeX = 0;
+    tallyScreen.setCursor(timeX, row0Y);
+    tallyScreen.print(timeStr);
+
+    // WiFi icon (second segment center on the top row), aligned near the clock/SoC baseline
+    int wifiX = wifiCenterX - 3;   // icon is ~7px wide
+    int wifiY = row0Y + 0;         // positioned close to the Clock/SoC baseline
+    bool wifiConnected = (WiFi.status() == WL_CONNECTED);
+    uint16_t wifiColor = wifiConnected ? TFT_WHITE : TFT_DARKGREY;
+
+    // Slightly larger WiFi "fan" icon
+    tallyScreen.drawLine(wifiX + 2, wifiY + 9, wifiX + 3, wifiY + 9, wifiColor);
+    tallyScreen.drawLine(wifiX + 1, wifiY + 8, wifiX + 4, wifiY + 8, wifiColor);
+    tallyScreen.drawLine(wifiX,     wifiY + 7, wifiX + 5, wifiY + 7, wifiColor);
+    tallyScreen.drawLine(wifiX - 1, wifiY + 6, wifiX + 6, wifiY + 6, wifiColor);
+
+    // MQTT icon (third segment center on the top row), aligned near the clock/SoC baseline
+    int mqttX = mqttCenterX - 7;   // box is 14px wide
+    int mqttY = row0Y + 2;         // positioned close to the Clock/SoC baseline
+    bool mqttConnected = eff.mqtt_isConnected;
+    uint16_t mqttColor = mqttConnected ? TFT_WHITE : TFT_DARKGREY;
+
+    tallyScreen.drawRect(mqttX, mqttY, 14, 10, mqttColor);
+    if (mqttConnected) {
+        // check mark
+        tallyScreen.drawLine(mqttX + 2, mqttY + 4, mqttX + 4, mqttY + 2, mqttColor);
+        tallyScreen.drawLine(mqttX + 4, mqttY + 2, mqttX + 7, mqttY + 6, mqttColor);
+    } else {
+        // X
+        tallyScreen.drawLine(mqttX + 2, mqttY + 2, mqttX + 7, mqttY + 7, mqttColor);
+        tallyScreen.drawLine(mqttX + 7, mqttY + 2, mqttX + 2, mqttY + 7, mqttColor);
+    }
+
+    // Battery (top-right): horizontal icon with SoC inside
+    float soc = pwr.batPercentage;
+    if (soc < 0.0f) soc = 0.0f;
+    if (soc > 100.0f) soc = 100.0f;
+
+    // Battery body dimensions (rightmost segment, shifted 4px left)
+    const int batWidth  = 40;
+    const int batHeight = fontHeight - 1;   // match font height
+    int batBodyX        = batCenterX - (batWidth / 2) - 4;   // shift left 4 px
+    if (batBodyX < 0) batBodyX = 0;
+    const int batBodyY  = row0Y;
+
+    // Draw main battery rectangle
+    tallyScreen.drawRect(batBodyX, batBodyY, batWidth, batHeight, TFT_WHITE);
+
+    // Draw the positive terminal as a small tab on the right
+    const int termWidth  = 4;
+    const int termHeight = batHeight / 2;
+    const int termX      = batBodyX + batWidth;
+    const int termY      = batBodyY + (batHeight - termHeight) / 2;
+    tallyScreen.drawRect(termX, termY, termWidth, termHeight, TFT_WHITE);
+
+    // Fill level inside the battery
+    int fillMaxWidth = batWidth - 4;   // leave a small margin inside
+    int fillWidth    = static_cast<int>((fillMaxWidth * soc) / 100.0f);
+    if (fillWidth < 0) fillWidth = 0;
+    if (fillWidth > fillMaxWidth) fillWidth = fillMaxWidth;
+    int fillX = batBodyX + 2;
+    int fillY = batBodyY + 2;
+    int fillH = batHeight - 4;
+
+    uint16_t darkRed    = M5.Display.color565(150, 0, 0);
+    uint16_t darkerGreen= M5.Display.color565(0, 120, 0);
+    uint16_t fillColor = (soc <= 20.0f) ? darkRed : darkerGreen;
+    tallyScreen.fillRect(fillX, fillY, fillWidth, fillH, fillColor);
+
+    // SoC text horizontally centered inside the battery body (e.g., "100" or "75")
+    char socText[8];
+    snprintf(socText, sizeof(socText), "%.0f", soc);
+    String socStr = socText;
+    int16_t socW = tallyScreen.textWidth(socStr);
+    int16_t socX = batBodyX + (batWidth - socW) / 2;
+    // Place SoC number on the same baseline as the clock text (row0Y)
+    int16_t socY = row0Y;
+
+    // Draw SoC text transparently over the fill so color shows through
+    tallyScreen.setTextColor(TFT_WHITE);
+    tallyScreen.setCursor(socX, socY);
+    tallyScreen.print(socStr);
+    
+    // Prefer the runtime-selected input; fall back to configured input if none.
+    uint8_t selectedId = g_tally.selectedInput ? g_tally.selectedInput : eff.atemInput;
+
+
+    // If no input is configured/selected yet, treat as idle & just show UI
     bool isProgram = false;
     bool isPreview = false;
 
-    if (myInput != 0) {
-        isProgram = g_tally.isProgram(myInput);
-        isPreview = g_tally.isPreview(myInput);
+    if (selectedId != 0) {
+        isProgram = g_tally.isProgram(selectedId);
+        isPreview = g_tally.isPreview(selectedId);
     }
 
     // --- Background color based on tally state ---
-    if (isProgram) {
-        tallyScreen.fillRect(0, 0, 240, 135, TFT_RED);
-        // return mqtt
-    } else if (isPreview) {
-        tallyScreen.fillRect(0, 0, 240, 135, TFT_GREEN);
-        // return mqtt
-    } else {
-        tallyScreen.fillRect(0, 0, 240, 135, TFT_BLACK);
-        // return mqtt
-    }
-    
-    // Battery
-    tallyScreen.setTextSize(1);
-    tallyScreen.setCursor(10,8);
-    tallyScreen.setTextColor(TFT_WHITE, TFT_BLACK);
-    tallyScreen.printf("Bat: %.0f%%", pwr.batPercentage);
-    
-    // Clock
-    tallyScreen.setTextSize(2);
-    tallyScreen.setCursor((tft_width/2)-20, 8);
-    tallyScreen.setTextColor(TFT_WHITE, TFT_BLACK);
-    auto now = localTime.dateTime("g:i:s A");
-    tallyScreen.print(now ? now : "--:--:--");
+    enum class TallyColor {
+        Black,
+        Green,
+        Red
+    };
+    static TallyColor lastColor = TallyColor::Black;
 
-    
-    // Friendly Name
-    tallyScreen.setTextSize(9);
-    tallyScreen.setCursor(10,80);
-    tallyScreen.setTextColor(TFT_WHITE);
-    tallyScreen.print(eff.friendlyName);
-    
+    TallyColor currentColor;
+    if (isProgram) {
+        currentColor = TallyColor::Red;
+        tallyScreen.fillRect(0, statusBarHeight, tft_width, tft_heigth - statusBarHeight, TFT_RED);
+    } else if (isPreview) {
+        currentColor = TallyColor::Green;
+        tallyScreen.fillRect(0, statusBarHeight, tft_width, tft_heigth - statusBarHeight, TFT_GREEN);
+    } else {
+        currentColor = TallyColor::Black;
+        tallyScreen.fillRect(0, statusBarHeight, tft_width, tft_heigth - statusBarHeight, TFT_BLACK);
+    }
+
+    // If tally color changed since last frame, publish to MQTT
+    if (currentColor != lastColor) {
+        const char* colorStr = "black";
+        switch (currentColor) {
+            case TallyColor::Red:   colorStr = "red";   break;
+            case TallyColor::Green: colorStr = "green"; break;
+            case TallyColor::Black: colorStr = "black"; break;
+        }
+        g_mqtt.publishTallyColor(String(colorStr));
+        lastColor = currentColor;
+    }
+
+    // --- Selected label (SEL) in the middle row, no border/background ---
+
+    // Selected label from currently selected input
+    String selectedLabel;
+    if (selectedId != 0) {
+        if (const AtemInputInfo* info = g_tally.findInput(selectedId)) {
+            if (info->shortName.length()) {
+                selectedLabel = info->shortName;
+            } else if (info->longName.length()) {
+                selectedLabel = info->longName;
+            }
+        }
+        if (!selectedLabel.length()) {
+            selectedLabel = String(selectedId);
+        }
+    }
+
+    // Determine labels for current PREV and PROG buses by scanning known input IDs
+    String prevLabel;
+    String progLabel;
+    for (uint8_t id = 1; id <= 32; ++id) {
+        const AtemInputInfo* info = g_tally.findInput(id);
+        if (!info) continue;
+
+        // Build a display label for this input
+        String label;
+        if (info->shortName.length()) {
+            label = info->shortName;
+        } else if (info->longName.length()) {
+            label = info->longName;
+        } else {
+            label = String(id);
+        }
+
+        if (g_tally.isPreview(id) && !prevLabel.length()) {
+            prevLabel = label;
+        }
+        if (g_tally.isProgram(id) && !progLabel.length()) {
+            progLabel = label;
+        }
+
+        // If we've found both, we can stop early
+        if (prevLabel.length() && progLabel.length()) {
+            break;
+        }
+    }
+
+    // Friendly name (from config), fallback to "Cam"
+    String friendlyLabel = eff.friendlyName && eff.friendlyName[0] != '\0'
+                           ? String(eff.friendlyName)
+                           : String("Cam");
+
+    // Placeholder for SEL font height if we later want to use it to adjust spacing above the friendly name
+    int selFontHeight = 0;
+
+    // Second row of the status bar: three subtle columns [SEL] [PREV] [PROG]
+    {
+        // Use a mid-size font that is easy to read but not overpowering
+        tallyScreen.setFont(&fonts::DejaVu9);
+        tallyScreen.setTextSize(2);
+        tallyScreen.setTextColor(TFT_WHITE, TFT_BLACK);
+
+        // Compute basic layout for three equal-width columns, with a small horizontal margin
+        int marginX   = 4;                         // inset columns from left/right edges
+        int innerW    = tft_width - (marginX * 2);
+        int colWidth  = innerW / 3;
+        int col1X     = marginX;
+        int col2X     = marginX + colWidth;
+        int col3X     = marginX + (colWidth * 2);
+
+        int rowFontHeight = tallyScreen.fontHeight();
+        int boxHeight     = rowFontHeight + 6;              // a little padding around the text
+
+        // Center the box vertically around the text baseline for row1
+        int boxTopY       = row1Y - (rowFontHeight/4)+2;  // adjust to better center around baseline
+        if (boxTopY < 0) boxTopY = 0;
+
+        // Dynamic border color for SEL column: match the current tally state
+        uint16_t selBorderColor;
+        if (isProgram) {
+            selBorderColor = TFT_RED;
+        } else if (isPreview) {
+            selBorderColor = TFT_GREEN;
+        } else {
+            selBorderColor = TFT_BLACK;
+        }
+
+        // Column 1: SEL (selected input label or literal "SEL" if none)
+        String selText = selectedLabel.length() ? selectedLabel : String("SEL");
+        int16_t selTextW = tallyScreen.textWidth(selText);
+        int16_t selTextX = col1X + (colWidth - selTextW) / 2;
+        if (selTextX < col1X + 2) selTextX = col1X + 2;
+
+        tallyScreen.drawRect(col1X + 1, boxTopY, colWidth - 2, boxHeight, selBorderColor);
+        tallyScreen.setCursor(selTextX, row1Y);
+        tallyScreen.print(selText);
+
+        // Column 2: PREV (always green border) – show actual preview short name if available
+        String prevText = prevLabel.length() ? prevLabel : String("PREV");
+        int16_t prevTextW = tallyScreen.textWidth(prevText);
+        int16_t prevTextX = col2X + (colWidth - prevTextW) / 2;
+        if (prevTextX < col2X + 2) prevTextX = col2X + 2;
+
+        tallyScreen.drawRect(col2X + 1, boxTopY, colWidth - 2, boxHeight, TFT_GREEN);
+        tallyScreen.setCursor(prevTextX, row1Y);
+        tallyScreen.print(prevText);
+
+        // Column 3: PROG (always red border) – show actual program short name if available
+        String progText = progLabel.length() ? progLabel : String("PROG");
+        int16_t progTextW = tallyScreen.textWidth(progText);
+        int16_t progTextX = col3X + (colWidth - progTextW) / 2;
+        if (progTextX < col3X + 2) progTextX = col3X + 2;
+
+        tallyScreen.drawRect(col3X + 1, boxTopY, colWidth - 2, boxHeight, TFT_RED);
+        tallyScreen.setCursor(progTextX, row1Y);
+        tallyScreen.print(progText);
+    }
+
+    // --- Friendly name at the bottom (large, left-aligned, using DejaVu56) ---
+    if (friendlyLabel.length()) {
+        // Use a large built-in DejaVu56 GFX font and fake a bold effect by overdrawing
+        tallyScreen.setFont(&fonts::DejaVu72);
+        tallyScreen.setTextSize(1);
+        tallyScreen.setTextColor(TFT_WHITE);
+
+        int nameFontHeight = tallyScreen.fontHeight();
+
+        int16_t baseY = tft_heigth - nameFontHeight - 4;
+        int16_t minY  = statusBarHeight + 12;
+        if (baseY < minY) {
+            baseY = minY;
+        }
+
+        int16_t nameX = 10;
+        tallyScreen.setCursor(nameX, baseY);
+        tallyScreen.print(friendlyLabel);
+        tallyScreen.setCursor(nameX + 1, baseY);
+        tallyScreen.print(friendlyLabel);
+    }
+
     tallyScreen.pushSprite(0,0);
-    
 }
 
 
@@ -189,34 +450,34 @@ void changeScreen(int newScreen) {
     setupScreen.deleteSprite();
     
     // clearScreen
-    M5.Lcd.fillScreen(TFT_BLACK);
-    M5.Lcd.setTextSize(1);
-    M5.Lcd.setCursor(0,0);
+    M5.Display.fillScreen(TFT_BLACK);
+    M5.Display.setTextSize(1);
+    M5.Display.setCursor(0, 0);
 
     switch (currentScreen) {
         case SCREEN_STARTUP:
             // startupScreen
             startupScreen.createSprite(tft_width-5, tft_heigth-5);
-            startupScreen.setRotation(3);
+            // startupScreen.setRotation(3);
             break;
         case SCREEN_TALLY:
             // tallyScreen
             tallyScreen.createSprite(tft_width, tft_heigth);
-            tallyScreen.setRotation(3);
+            // tallyScreen.setRotation(3);
             break;
         case SCREEN_POWER:
             // powerScreen
             powerScreen.createSprite(tft_width, tft_heigth);
-            powerScreen.setRotation(3);
+            // powerScreen.setRotation(3);
             break;
         case SCREEN_SETUP:
             // setupScreen
             if (!wm.getWebPortalActive()) wm.startWebPortal();
             setupScreen.createSprite(tft_width, tft_heigth);
-            setupScreen.setRotation(3);
+            // setupScreen.setRotation(3);
             break;
         default:
-            M5.Lcd.println("Invalid Screen!");
+            M5.Display.println("Invalid Screen!");
             break; 
     }
 
@@ -253,18 +514,19 @@ void refreshScreen() {
 
 static const int minBrightness = 10;
 void setBrightness(int newBrightness) {
-    // Clamp to 0–100 and respect the current power-mode cap.
     if (newBrightness < minBrightness) {
         newBrightness = minBrightness;
     }
     if (newBrightness > pwr.maxBrightness) {
-        newBrightness = minBrightness; // wrap to min if exceeding max
+        newBrightness = pwr.maxBrightness;
     }
 
     currentBrightness = newBrightness;
 
-    // On M5StickC-Plus, ScreenBreath expects 0–100.
-    M5.Axp.ScreenBreath(currentBrightness);
+    std::uint8_t hwBrightness = static_cast<std::uint8_t>(
+        (currentBrightness <= 0) ? 0 : (currentBrightness * 255) / 100
+    );
+    M5.Display.setBrightness(hwBrightness);
 }
 
 
