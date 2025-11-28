@@ -23,7 +23,7 @@ enum class LogLevel : uint8_t {
 namespace ConfigDefaults {
     // MQTT / network / time
     constexpr const char* MQTT_SERVER   = "127.0.0.1";
-    constexpr uint16_t    MQTT_PORT     = 1883;
+    constexpr const uint16_t    MQTT_PORT     = 1883;
     constexpr const char* MQTT_USERNAME = "";
     constexpr const char* MQTT_PASSWORD = "";
     constexpr const bool  MQTT_IS_CONNECTED = false;
