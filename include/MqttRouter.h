@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Arduino.h>
+#include <M5Unified.h>
 #include "ConfigState.h"
 #include "TallyState.h"
 

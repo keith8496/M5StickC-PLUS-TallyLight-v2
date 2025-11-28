@@ -1,7 +1,5 @@
-#include <Arduino.h>
-
+#include <M5Unified.h>
 #include <esp_task_wdt.h>
-#include <M5StickCPlus.h>
 #include <millisDelay.h>
 #include <WiFi.h>
 
@@ -9,6 +7,10 @@
 #include "NetworkModule.h"
 #include "PrefsModule.h"
 #include "PowerModule.h"
+
+#include "ButtonManager.h"
+#include "ButtonRouter.h"
+#include "DisplayModule.h"
 
 #include "ConfigState.h"
 #include "TallyState.h"
@@ -31,6 +33,9 @@ millisDelay ms_startup;
 ConfigState g_config;
 TallyState  g_tally;
 MqttClient  g_mqtt(g_config, g_tally);
+
+ButtonManager g_buttons;
+ButtonRouter  g_buttonRouter(g_config, g_tally);
 
 uint32_t g_bootMillis;
 
@@ -64,13 +69,20 @@ void onMqttMessage(const String& topic, const String& payload) {
 void setup () {
 
     Serial.begin(115200);
-    M5.begin();
-    M5.Lcd.setRotation(3);
+
+    // Initialize M5Unified for M5StickC-Plus
+    auto cfg = M5.config();
+    // Default config is usually fine for StickC-Plus; tweak here if needed later.
+    M5.begin(cfg);
+
+    // Use M5Unified display API
+    M5.Display.setRotation(1);
     setCpuFrequencyMhz(80); //Save battery by turning down the CPU clock
     btStop();               //Save battery by turning off Bluetooth
 
     currentBrightness = 50;
     setBrightness(currentBrightness);
+    g_buttons.begin(600);  // 600 ms long-press threshold
 
     // Set deviceId and friendly deviceName
     uint8_t macAddress[6];
@@ -98,9 +110,9 @@ void setup () {
     prefs_applyToConfig(g_config);
     
     // --- Initialize MQTT ---
+    startupLog("Initializing MQTT...", 1);
     g_bootMillis = millis();
     g_mqtt.setMessageHandler(onMqttMessage);
-    startupLog("Initializing MQTT...", 1);
     g_mqtt.begin();
 
     while (ms_startup.isRunning()) {
@@ -125,14 +137,16 @@ void setup () {
     }
       
     startupLog("", 1);
-    startupLog("Press \"M5\" button \r\nto continue.", 2);
+    //startupLog("Press \"M5\" button \r\nto continue.", 2);
+    changeScreen(-1);
+
 
     #if TPS
         ms_tps.start(1000);
         ms_runningAvg.start(60000);
     #endif
 
-    // Init task watchdog: 10s timeout, panic = true (print backtrace & reset)
+    // Init task watchdog: 60s timeout, panic = true (print backtrace & reset)
     esp_task_wdt_init(60, true);
     // Watch the current (Arduino) task
     esp_task_wdt_add(NULL);
@@ -200,15 +214,9 @@ void loop () {
     }
     // End New MQTT Stuff
 
-    // M5 Button
-    if (M5.BtnA.wasReleased()) {
-        changeScreen(-1);
-    }
-
-    // Action Button
-    if (M5.BtnB.wasReleased()) {
-        int newBrightness = currentBrightness + 10;
-        setBrightness(newBrightness);
+    ButtonEvent ev = g_buttons.poll();
+    if (ev.type != ButtonType::None) {
+        g_buttonRouter.handle(ev);
     }
 
     refreshScreen();

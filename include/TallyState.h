@@ -1,15 +1,15 @@
 #pragma once
 
-#include <Arduino.h>
+#include <M5Unified.h>
 #include <map>
 
 // High-level type from your JSON: "camera", "media", etc.
 // If you don't care yet, you can leave 'type' as a raw String.
 struct AtemInputInfo {
     uint8_t id = 0;
-    String  label;
-    String  type;          // "camera", "bars", ...
-    bool    tallyEnabled = true;
+    String shortName;    // e.g. "Cam1"
+    String longName;     // e.g. "Cam1 Center - main follow"
+    bool   tallyEnabled; // from "TRUE"/"FALSE"
 };
 
 struct TallyState {
@@ -22,12 +22,21 @@ struct TallyState {
     // Map from ATEM input ID → info (from sanctuary/atem/inputs JSON)
     std::map<uint8_t, AtemInputInfo> inputs;
 
-    // Helpers
-    bool isProgram(uint8_t input) const { return input != 0 && input == programInput; }
-    bool isPreview(uint8_t input) const { return input != 0 && input == previewInput; }
+    // Currently selected ATEM input ID for this tally device.
+    // 0 means "no selection".
+    uint8_t selectedInput = 0;
 
-    const AtemInputInfo* findInput(uint8_t input) const {
-        auto it = inputs.find(input);
-        return (it != inputs.end()) ? &it->second : nullptr;
-    }
+    // Helpers
+    bool isProgram(uint8_t input) const;
+    bool isPreview(uint8_t input) const;
+    const AtemInputInfo* findInput(uint8_t input) const;
+
+    // Ensure selectedInput points at a tally-enabled input (or 0 if none).
+    void normalizeSelected();
+
+    // Cycle to the next tally-enabled input (wraps around, skips disabled).
+    void selectNextInput();
+
+    // Convenience accessor for the currently selected input info.
+    const AtemInputInfo* currentSelected() const;
 };

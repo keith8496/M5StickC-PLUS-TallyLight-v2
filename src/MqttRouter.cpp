@@ -1,5 +1,7 @@
-#include "MqttRouter.h"
 #include <ArduinoJson.h>
+#include "MqttRouter.h"
+#include "MqttClient.h"
+extern MqttClient g_mqtt;
 
 // Spec constants
 static const char* TOPIC_ATEM_PREVIEW = "sanctuary/atem/preview";
@@ -8,8 +10,6 @@ static const char* TOPIC_ATEM_INPUTS  = "sanctuary/atem/inputs";
 
 static const char* TOPIC_GLOBAL_CONFIG_ROOT = "sanctuary/tally/config";
 static const char* TOPIC_ALL_CMD            = "sanctuary/tally/all/cmd";
-
-String g_tallyLabel;
 
 // ---------- Helpers -------------------------------------------------
 
@@ -59,17 +59,18 @@ static void handleAtemMessage(TallyState& tally, const String& topic, const Stri
         return;
     }
     if (topic == TOPIC_ATEM_INPUTS) {
-        // Parse JSON into tally.inputs
-        StaticJsonDocument<2048> doc;  // tune size if needed
+        Serial.printf("[MQTT] ATEM_INPUTS topic received, payload length=%u\n", payload.length());
+
+        JsonDocument doc;  // ArduinoJson 7: elastic capacity on heap
         DeserializationError err = deserializeJson(doc, payload);
         if (err) {
-            // You can add optional Serial logging here if you like
+            Serial.printf("[MQTT] ATEM inputs JSON parse failed: %s (len=%u)\n",
+                        err.c_str(), payload.length());
             return;
         }
 
         tally.inputs.clear();
 
-        // Expecting an object: { "1": { ... }, "2": { ... } }
         JsonObject root = doc.as<JsonObject>();
         for (JsonPair kv : root) {
             const char* key = kv.key().c_str();   // "1", "2", ...
@@ -77,13 +78,44 @@ static void handleAtemMessage(TallyState& tally, const String& topic, const Stri
             JsonObject obj = kv.value().as<JsonObject>();
 
             AtemInputInfo info;
-            info.id           = obj["id"]               | id;
-            info.label        = obj["label"].as<String>();
-            info.type         = obj["type"].as<String>();
-            info.tallyEnabled = obj["tallyEnabled"]    | true;
+            info.id = id;
+
+            info.shortName = obj["short_name"].as<String>();
+            info.longName  = obj["long_name"].as<String>();
+
+            String enabledStr = obj["tally_enabled"] | "FALSE";
+            enabledStr.toLowerCase();
+            info.tallyEnabled = (enabledStr == "true");
 
             tally.inputs[id] = info;
+
+            Serial.printf(
+                "[MQTT] ATEM input %u: short=\"%s\" long=\"%s\" enabled=%d\n",
+                id,
+                info.shortName.c_str(),
+                info.longName.c_str(),
+                info.tallyEnabled ? 1 : 0
+            );
         }
+
+        tally.normalizeSelected();
+
+        unsigned enabledCount = 0;
+
+        // tally.inputs is a std::map<uint8_t, AtemInputInfo>
+        for (std::map<uint8_t, AtemInputInfo>::const_iterator it = tally.inputs.begin();
+            it != tally.inputs.end();
+            ++it) {
+            if (it->second.tallyEnabled) {
+                ++enabledCount;
+            }
+        }
+
+        Serial.printf(
+            "[MQTT] ATEM inputs loaded, enabled_count=%u, total=%u\n",
+            enabledCount,
+            (unsigned)tally.inputs.size()
+        );
     }
 }
 
@@ -91,11 +123,7 @@ static void handleAtemMessage(TallyState& tally, const String& topic, const Stri
 
 static void handleGlobalConfig(ConfigState& cfg, const String& key, const String& payload) {
     // key is the part after sanctuary/tally/config/
-    if (key == "wifi_ssid") {
-        cfg.global.wifiSsid = payload;
-    } else if (key == "wifi_password") {
-        cfg.global.wifiPassword = payload;
-    } else if (key == "mqtt_server") {
+    if (key == "mqtt_server") {
         cfg.global.mqttServer = payload;
     } else if (key == "mqtt_port") {
         cfg.global.mqttPort = static_cast<uint16_t>(payload.toInt());
@@ -106,7 +134,7 @@ static void handleGlobalConfig(ConfigState& cfg, const String& key, const String
     } else if (key == "ntp_server") {
         cfg.global.ntpServer = payload;
     } else if (key == "timezone") {
-        cfg.global.timezone = payload;
+        cfg.global.timeZone = payload;
     }
 
     // Display / tally
@@ -222,6 +250,16 @@ void handleMqttMessage(
     if (topic.startsWith(devCfgRoot)) {
         String key = topic.substring(devCfgRoot.length()); // part after config/
         handleDeviceConfig(cfg, key, payload);
+
+        // If the per-device input was changed via MQTT, sync it into TallyState
+        if (key == "input") {
+            uint8_t v = cfg.device.atemInput;
+            tally.selectedInput = v;
+            tally.normalizeSelected();
+            Serial.printf("[MQTT] config/input set to %u, publishing status\n", cfg.device.atemInput);
+            g_mqtt.publishSelectedInput(cfg.device.atemInput);
+        }
+
         return;
     }
 
