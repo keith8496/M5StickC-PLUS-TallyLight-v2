@@ -121,6 +121,11 @@ void MqttClient::setupClient() {
 void MqttClient::ensureConnected() {
     if (_connected || !_mqtt) return;
 
+    // Don’t even try if Wi-Fi is down; avoids useless DNS/TCP attempts
+    if (WiFi.status() != WL_CONNECTED) {
+        return;
+    }
+
     if (connectOnce()) {
         _connected = true;
         g_config.device.mqtt_isConnected = true;
