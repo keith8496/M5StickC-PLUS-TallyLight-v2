@@ -1,6 +1,5 @@
-#include <Arduino.h>
-#include <esp_task_wdt.h>
 #include <M5Unified.h>
+#include <esp_task_wdt.h>
 #include <millisDelay.h>
 #include <WiFi.h>
 
@@ -8,6 +7,10 @@
 #include "NetworkModule.h"
 #include "PrefsModule.h"
 #include "PowerModule.h"
+
+#include "ButtonManager.h"
+#include "ButtonRouter.h"
+#include "DisplayModule.h"
 
 #include "ConfigState.h"
 #include "TallyState.h"
@@ -30,6 +33,9 @@ millisDelay ms_startup;
 ConfigState g_config;
 TallyState  g_tally;
 MqttClient  g_mqtt(g_config, g_tally);
+
+ButtonManager g_buttons;
+ButtonRouter  g_buttonRouter(g_config, g_tally);
 
 uint32_t g_bootMillis;
 
@@ -59,25 +65,6 @@ void onMqttMessage(const String& topic, const String& payload) {
     Serial.printf("[MQTT] %s => %s\n", topic.c_str(), payload.c_str());
 }
 
-void cycleBrightness() {
-    // Discrete brightness levels we cycle through
-    static const int levels[] = {10, 30, 50, 80, 100};
-    static const size_t numLevels = sizeof(levels) / sizeof(levels[0]);
-
-    // Find the nearest level at or above the current setting
-    size_t idx = 0;
-    for (; idx < numLevels; ++idx) {
-        if (currentBrightness <= levels[idx]) {
-            break;
-        }
-    }
-
-    // Advance to the next level (wrap at the end)
-    idx = (idx + 1) % numLevels;
-
-    currentBrightness = levels[idx];
-    setBrightness(currentBrightness);
-}
 
 void setup () {
 
@@ -95,6 +82,7 @@ void setup () {
 
     currentBrightness = 50;
     setBrightness(currentBrightness);
+    g_buttons.begin(600);  // 600 ms long-press threshold
 
     // Set deviceId and friendly deviceName
     uint8_t macAddress[6];
@@ -226,32 +214,9 @@ void loop () {
     }
     // End New MQTT Stuff
 
-    // Button A: cycle through ATEM inputs
-    if (M5.BtnA.wasClicked()) {
-        g_tally.selectNextInput();
-
-        const AtemInputInfo* sel = g_tally.currentSelected();
-        if (sel) {
-            Serial.printf(
-                "BtnA -> selected input: %u %s (%s)\n",
-                sel->id,
-                sel->shortName.c_str(),
-                sel->longName.c_str()
-            );
-        } else {
-            Serial.println("BtnA -> no tally-enabled inputs available");
-        }
-    }
-
-    // Button B:
-    //   - long press (hold) -> change screens
-    //   - short press (click) -> cycle brightness
-    if (M5.BtnB.wasHold()) {
-        Serial.println("BtnB long press -> changeScreen(-1)");
-        changeScreen(-1);
-    } else if (M5.BtnB.wasClicked()) {
-        Serial.println("BtnB click -> cycleBrightness()");
-        cycleBrightness();
+    ButtonEvent ev = g_buttons.poll();
+    if (ev.type != ButtonType::None) {
+        g_buttonRouter.handle(ev);
     }
 
     refreshScreen();

@@ -93,6 +93,20 @@ void MqttClient::publishStatus(const StatusSnapshot& st) {
     }
 }
 
+void MqttClient::publishSelectedInput(uint8_t input) {
+    Serial.printf("[mqtt] publishSelectedInput(%u), connected=%d\n", input, _connected);
+    if (!_connected || !_mqtt) {
+        Serial.println("[mqtt] publishSelectedInput aborted - not connected or client null");
+        return;
+    }
+
+    const String root = topicDeviceRoot() + "/" + STATUS_ROOT_SUBTOPIC + "/";
+    String topic = root + "input";
+    String payload = String(input);
+    Serial.printf("[mqtt] publishing to '%s' payload '%s'\n", topic.c_str(), payload.c_str());
+    _mqtt->publish(topic.c_str(), payload.c_str(), false);
+}
+
 void MqttClient::publishLog(const String& line, LogLevel level) {
     if (!_connected) return;
 

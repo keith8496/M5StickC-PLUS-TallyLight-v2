@@ -1,7 +1,7 @@
 #pragma once
 
-#include <Arduino.h>
-#include <functional>
+#include <M5Unified.h>
+//#include <functional> //side question: is this needed?
 #include "ConfigState.h"
 #include "TallyState.h"
 
@@ -40,6 +40,8 @@ public:
 
     // Publish one-off log line if log_level allows
     void publishLog(const String& line, LogLevel level = LogLevel::Info);
+
+    void publishSelectedInput(uint8_t input);
 
     // Set callback for *all* inbound topics we care about
     void setMessageHandler(MessageHandler handler) { _onMessage = handler; }

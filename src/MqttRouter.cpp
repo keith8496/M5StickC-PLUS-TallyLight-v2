@@ -1,5 +1,7 @@
 #include <ArduinoJson.h>
 #include "MqttRouter.h"
+#include "MqttClient.h"
+extern MqttClient g_mqtt;
 
 // Spec constants
 static const char* TOPIC_ATEM_PREVIEW = "sanctuary/atem/preview";
@@ -121,11 +123,7 @@ static void handleAtemMessage(TallyState& tally, const String& topic, const Stri
 
 static void handleGlobalConfig(ConfigState& cfg, const String& key, const String& payload) {
     // key is the part after sanctuary/tally/config/
-    if (key == "wifi_ssid") {
-        cfg.global.wifiSsid = payload;
-    } else if (key == "wifi_password") {
-        cfg.global.wifiPassword = payload;
-    } else if (key == "mqtt_server") {
+    if (key == "mqtt_server") {
         cfg.global.mqttServer = payload;
     } else if (key == "mqtt_port") {
         cfg.global.mqttPort = static_cast<uint16_t>(payload.toInt());
@@ -136,7 +134,7 @@ static void handleGlobalConfig(ConfigState& cfg, const String& key, const String
     } else if (key == "ntp_server") {
         cfg.global.ntpServer = payload;
     } else if (key == "timezone") {
-        cfg.global.timezone = payload;
+        cfg.global.timeZone = payload;
     }
 
     // Display / tally
@@ -252,6 +250,16 @@ void handleMqttMessage(
     if (topic.startsWith(devCfgRoot)) {
         String key = topic.substring(devCfgRoot.length()); // part after config/
         handleDeviceConfig(cfg, key, payload);
+
+        // If the per-device input was changed via MQTT, sync it into TallyState
+        if (key == "input") {
+            uint8_t v = cfg.device.atemInput;
+            tally.selectedInput = v;
+            tally.normalizeSelected();
+            Serial.printf("[MQTT] config/input set to %u, publishing status\n", cfg.device.atemInput);
+            g_mqtt.publishSelectedInput(cfg.device.atemInput);
+        }
+
         return;
     }
 

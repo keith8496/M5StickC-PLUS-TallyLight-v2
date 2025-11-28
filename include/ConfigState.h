@@ -1,6 +1,5 @@
 #pragma once
-
-#include <Arduino.h>
+#include <M5Unified.h>
 
 // How often we publish status by default (seconds)
 constexpr uint16_t DEFAULT_STATUS_INTERVAL_SEC = 30;
@@ -21,51 +20,84 @@ enum class LogLevel : uint8_t {
     Debug
 };
 
+namespace ConfigDefaults {
+    // MQTT / network / time
+    constexpr const char* MQTT_SERVER   = "127.0.0.1";
+    constexpr uint16_t    MQTT_PORT     = 1883;
+    constexpr const char* MQTT_USERNAME = "";
+    constexpr const char* MQTT_PASSWORD = "";
+    constexpr const bool  MQTT_IS_CONNECTED = false;
+    constexpr const char* NTP_SERVER_DEFAULT    = "us.pool.ntp.org";
+    constexpr const char* TIMEZONE      = "Etc/UTC"; // Example time zones: "America/Chicago", "GMT-6"
+
+    // Display / brightness
+    constexpr uint8_t BRIGHTNESS             = 50;             // normal mode brightness (default 50%)
+    constexpr uint8_t POWERSAVER_BRIGHTNESS  = 20;  // power-saver brightness (default 20%)
+    constexpr uint8_t POWERSAVER_BATTERY_PCT = 50;  // enable power-saver mode below this battery %
+
+    // Tally colors
+    constexpr const char* TALLY_COLOR_PROGRAM = "#FF0000";
+    constexpr const char* TALLY_COLOR_PREVIEW = "#00FF00";
+
+    // Device-specific
+    constexpr const char* FRIENDLY_NAME = "CamX";
+    constexpr uint8_t ATEAM_INPUT_DEFAULT = 1;
+    constexpr uint16_t BATTERY_CAPACITY_MAH = 2200; // mAh
+
+    // Wi-Fi tuning
+    constexpr int8_t        WIFI_TX_POWER_DBM = 8; // ESP32 TX power (0..20-ish)
+    constexpr WifiSleepMode WIFI_SLEEP        = WifiSleepMode::Modem;
+
+    // Status interval (seconds)
+    constexpr uint16_t STATUS_INTERVAL_SEC = DEFAULT_STATUS_INTERVAL_SEC;
+
+    // Logging
+    constexpr LogLevel LOG_LEVEL = LogLevel::Info;
+}
+
 // --- Global (shared) config ---------------------------------
 
 struct GlobalConfig {
     // Network / MQTT / time
-    String wifiSsid;
-    String wifiPassword;
-    String mqttServer;
-    uint16_t mqttPort = 1883;
-    String mqttUsername;
-    String mqttPassword;
-    String ntpServer;
-    String timezone;          // e.g. "America/Chicago" or "GMT-6"
+    String mqttServer = ConfigDefaults::MQTT_SERVER;
+    uint16_t mqttPort = ConfigDefaults::MQTT_PORT;
+    String mqttUsername = ConfigDefaults::MQTT_USERNAME;
+    String mqttPassword = ConfigDefaults::MQTT_PASSWORD;
+    String ntpServer = ConfigDefaults::NTP_SERVER_DEFAULT;
+    String timeZone = ConfigDefaults::TIMEZONE;
 
     // Display / tally brightness (0–100 logical scale)
     // These are "percent-ish" values that map directly into ScreenBreath(0–100).
-    uint8_t brightness = 50;            // normal mode brightness (default 50%)
-    uint8_t powersaverBrightness = 20;  // power-saver brightness (default 20%)
-    uint8_t powersaverBatteryPct = 25;  // enable power-saver mode below this battery %
+    uint8_t brightness = ConfigDefaults::BRIGHTNESS;
+    uint8_t powersaverBrightness = ConfigDefaults::POWERSAVER_BRIGHTNESS;  
+    uint8_t powersaverBatteryPct = ConfigDefaults::POWERSAVER_BATTERY_PCT;  
 
-    String tallyColorProgram = "#FF0000";
-    String tallyColorPreview = "#00FF00";
+    String tallyColorProgram = ConfigDefaults::TALLY_COLOR_PROGRAM;
+    String tallyColorPreview = ConfigDefaults::TALLY_COLOR_PREVIEW;
 
     // Wi-Fi tuning
-    int8_t wifiTxPowerDbm = 8;       // ESP32 TX power (0..20-ish)
-    WifiSleepMode wifiSleep = WifiSleepMode::Modem;
-    uint16_t statusIntervalSec = DEFAULT_STATUS_INTERVAL_SEC;
+    int8_t wifiTxPowerDbm = ConfigDefaults::WIFI_TX_POWER_DBM;       
+    WifiSleepMode wifiSleep = ConfigDefaults::WIFI_SLEEP;
+    uint16_t statusIntervalSec = ConfigDefaults::STATUS_INTERVAL_SEC;
 
     // Logging
-    LogLevel logLevel = LogLevel::Info;
+    LogLevel logLevel = ConfigDefaults::LOG_LEVEL;
 };
 
 // --- Per-device config ---------------------------------------
 
 struct DeviceConfig {
     // Fixed identity for this build
-    String deviceId;          // e.g. "7A90F3"
-    String deviceName;        // e.g. "m5stick-7A90F3"
+    String deviceId;
+    String deviceName;
 
     // Mutable from MQTT
-    String friendlyName;      // e.g. "Camera 3 Left"
-    uint8_t atemInput = 0;    // "3" in MQTT → 3
-    bool mqtt_isConnected = false;
+    String friendlyName = ConfigDefaults::FRIENDLY_NAME;
+    uint8_t atemInput = ConfigDefaults::ATEAM_INPUT_DEFAULT; 
+    bool mqtt_isConnected = ConfigDefaults::MQTT_IS_CONNECTED;
 
     // Battery / SoC model
-    uint16_t batteryCapacityMah = 2200; // SoC algorithm input
+    uint16_t batteryCapacityMah = ConfigDefaults::BATTERY_CAPACITY_MAH; // SoC algorithm input
 };
 
 // --- Effective config (merged view) --------------------------
@@ -77,14 +109,12 @@ struct EffectiveConfig {
     String friendlyName;
 
     // Network
-    String wifiSsid;
-    String wifiPassword;
     String mqttServer;
     uint16_t mqttPort;
     String mqttUsername;
     String mqttPassword;
     String ntpServer;
-    String timezone;
+    String timeZone;
 
     // Behaviour + display
     uint8_t brightness;
@@ -118,16 +148,16 @@ struct ConfigState {
 
         e.deviceId = device.deviceId;
         e.deviceName = device.deviceName;
-        e.friendlyName = device.friendlyName.length() ? device.friendlyName : device.deviceId;
+        e.friendlyName = device.friendlyName;
 
-        e.wifiSsid       = global.wifiSsid;
-        e.wifiPassword   = global.wifiPassword;
-        e.mqttServer     = global.mqttServer;
-        e.mqttPort       = global.mqttPort;
-        e.mqttUsername   = global.mqttUsername;
-        e.mqttPassword   = global.mqttPassword;
-        e.ntpServer      = global.ntpServer;
-        e.timezone       = global.timezone;
+        // Network: apply global config with sane defaults
+        e.mqttServer   = global.mqttServer;
+        e.mqttPort = global.mqttPort;
+        e.mqttUsername = global.mqttUsername;
+        e.mqttPassword = global.mqttPassword;
+
+        e.ntpServer = global.ntpServer;
+        e.timeZone  = global.timeZone;
 
         e.brightness             = global.brightness;
         e.powersaverBrightness   = global.powersaverBrightness;
