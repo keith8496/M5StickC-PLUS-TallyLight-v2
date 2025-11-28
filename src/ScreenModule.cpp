@@ -493,18 +493,15 @@ void refreshScreen() {
 
 static const int minBrightness = 10;
 void setBrightness(int newBrightness) {
-    // Clamp to 0–100 and respect the current power-mode cap.
     if (newBrightness < minBrightness) {
         newBrightness = minBrightness;
     }
     if (newBrightness > pwr.maxBrightness) {
-        // wrap back to minimum if exceeding configured max
-        newBrightness = minBrightness;
+        newBrightness = pwr.maxBrightness;
     }
 
     currentBrightness = newBrightness;
 
-    // M5Unified: brightness is 0–255 on M5.Display
     std::uint8_t hwBrightness = static_cast<std::uint8_t>(
         (currentBrightness <= 0) ? 0 : (currentBrightness * 255) / 100
     );
