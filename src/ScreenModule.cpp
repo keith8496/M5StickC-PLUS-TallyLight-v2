@@ -7,9 +7,11 @@
 
 #include "ConfigState.h"
 #include "TallyState.h"
+#include "MqttClient.h"
 
 extern ConfigState g_config;
 extern TallyState  g_tally;
+extern MqttClient g_mqtt;
 
 millisDelay md_screenRefresh;
 
@@ -177,15 +179,35 @@ void refreshTallyScreen() {
     }
 
     // --- Background color based on tally state ---
+    enum class TallyColor {
+        Black,
+        Green,
+        Red
+    };
+    static TallyColor lastColor = TallyColor::Black;
+
+    TallyColor currentColor;
     if (isProgram) {
+        currentColor = TallyColor::Red;
         tallyScreen.fillRect(0, statusBarHeight, tft_width, tft_heigth - statusBarHeight, TFT_RED);
-        // return mqtt
     } else if (isPreview) {
+        currentColor = TallyColor::Green;
         tallyScreen.fillRect(0, statusBarHeight, tft_width, tft_heigth - statusBarHeight, TFT_GREEN);
-        // return mqtt
     } else {
+        currentColor = TallyColor::Black;
         tallyScreen.fillRect(0, statusBarHeight, tft_width, tft_heigth - statusBarHeight, TFT_BLACK);
-        // return mqtt
+    }
+
+    // If tally color changed since last frame, publish to MQTT
+    if (currentColor != lastColor) {
+        const char* colorStr = "black";
+        switch (currentColor) {
+            case TallyColor::Red:   colorStr = "red";   break;
+            case TallyColor::Green: colorStr = "green"; break;
+            case TallyColor::Black: colorStr = "black"; break;
+        }
+        g_mqtt.publishTallyColor(String(colorStr));
+        lastColor = currentColor;
     }
 
     // --- Selected label (SEL) in the middle row, no border/background ---

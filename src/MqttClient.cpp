@@ -58,6 +58,35 @@ void MqttClient::loop() {
             ensureConnected();
         }
     }
+
+    // Debounced publish for status/input
+    if (_hasPendingSelectedInput && _connected && _mqtt) {
+        constexpr uint32_t DEBOUNCE_INPUT_MS = 150;
+        uint32_t now = millis();
+        if (now - _pendingSelectedInputChangedAtMs >= DEBOUNCE_INPUT_MS &&
+            _pendingSelectedInput != _lastPublishedSelectedInput) {
+            const String root = topicDeviceRoot() + "/" + STATUS_ROOT_SUBTOPIC + "/";
+            String topic   = root + "input";
+            String payload = String(_pendingSelectedInput);
+            _mqtt->publish(topic.c_str(), payload.c_str(), false);
+            _lastPublishedSelectedInput  = _pendingSelectedInput;
+            _hasPendingSelectedInput     = false;
+        }
+    }
+
+    // Debounced publish for status/tally
+    if (_hasPendingTallyColor && _connected && _mqtt) {
+        constexpr uint32_t DEBOUNCE_TALLY_MS = 100;
+        uint32_t now = millis();
+        if (now - _pendingTallyColorChangedAtMs >= DEBOUNCE_TALLY_MS &&
+            _pendingTallyColor != _lastPublishedTallyColor) {
+            const String root = topicDeviceRoot() + "/" + STATUS_ROOT_SUBTOPIC + "/";
+            String topic = root + "tally";
+            _mqtt->publish(topic.c_str(), _pendingTallyColor.c_str(), false);
+            _lastPublishedTallyColor  = _pendingTallyColor;
+            _hasPendingTallyColor     = false;
+        }
+    }
 }
 
 void MqttClient::publishAvailability(const String& state) {
@@ -94,17 +123,16 @@ void MqttClient::publishStatus(const StatusSnapshot& st) {
 }
 
 void MqttClient::publishSelectedInput(uint8_t input) {
-    Serial.printf("[mqtt] publishSelectedInput(%u), connected=%d\n", input, _connected);
-    if (!_connected || !_mqtt) {
-        Serial.println("[mqtt] publishSelectedInput aborted - not connected or client null");
-        return;
-    }
+    // Schedule a debounced publish of the selected input.
+    _pendingSelectedInput            = input;
+    _hasPendingSelectedInput         = true;
+    _pendingSelectedInputChangedAtMs = millis();
+}
 
-    const String root = topicDeviceRoot() + "/" + STATUS_ROOT_SUBTOPIC + "/";
-    String topic = root + "input";
-    String payload = String(input);
-    Serial.printf("[mqtt] publishing to '%s' payload '%s'\n", topic.c_str(), payload.c_str());
-    _mqtt->publish(topic.c_str(), payload.c_str(), false);
+void MqttClient::publishTallyColor(const String& color) {
+    _pendingTallyColor            = color;
+    _hasPendingTallyColor         = true;
+    _pendingTallyColorChangedAtMs = millis();
 }
 
 void MqttClient::publishLog(const String& line, LogLevel level) {
