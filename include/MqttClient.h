@@ -1,7 +1,7 @@
 #pragma once
 
 #include <M5Unified.h>
-//#include <functional> //side question: is this needed?
+#include <functional>
 #include "ConfigState.h"
 #include "TallyState.h"
 
@@ -43,6 +43,8 @@ public:
 
     void publishSelectedInput(uint8_t input);
 
+    void publishTallyColor(const String& color);
+
     // Set callback for *all* inbound topics we care about
     void setMessageHandler(MessageHandler handler) { _onMessage = handler; }
 
@@ -57,6 +59,18 @@ private:
     uint32_t     _lastReconnectAttemptMs = 0;
 
     MessageHandler _onMessage;
+
+    // Debounce state for /status/input publishes
+    uint8_t  _pendingSelectedInput            = 0;
+    bool     _hasPendingSelectedInput         = false;
+    uint32_t _pendingSelectedInputChangedAtMs = 0;
+    uint8_t  _lastPublishedSelectedInput      = 0;
+
+    // Debounce state for /status/tally publishes
+    String   _pendingTallyColor;
+    bool     _hasPendingTallyColor            = false;
+    uint32_t _pendingTallyColorChangedAtMs    = 0;
+    String   _lastPublishedTallyColor;
 
     // Internal helpers
     void setupClient();
