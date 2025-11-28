@@ -62,7 +62,7 @@ struct DeviceConfig {
     // Mutable from MQTT
     String friendlyName;      // e.g. "Camera 3 Left"
     uint8_t atemInput = 0;    // "3" in MQTT → 3
-    bool mqtt_isConnected;
+    bool mqtt_isConnected = false;
 
     // Battery / SoC model
     uint16_t batteryCapacityMah = 2200; // SoC algorithm input

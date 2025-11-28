@@ -122,9 +122,9 @@ void setup () {
     prefs_applyToConfig(g_config);
     
     // --- Initialize MQTT ---
+    startupLog("Initializing MQTT...", 1);
     g_bootMillis = millis();
     g_mqtt.setMessageHandler(onMqttMessage);
-    startupLog("Initializing MQTT...", 1);
     g_mqtt.begin();
 
     while (ms_startup.isRunning()) {
@@ -149,14 +149,16 @@ void setup () {
     }
       
     startupLog("", 1);
-    startupLog("Press \"M5\" button \r\nto continue.", 2);
+    //startupLog("Press \"M5\" button \r\nto continue.", 2);
+    changeScreen(-1);
+
 
     #if TPS
         ms_tps.start(1000);
         ms_runningAvg.start(60000);
     #endif
 
-    // Init task watchdog: 10s timeout, panic = true (print backtrace & reset)
+    // Init task watchdog: 60s timeout, panic = true (print backtrace & reset)
     esp_task_wdt_init(60, true);
     // Watch the current (Arduino) task
     esp_task_wdt_add(NULL);
@@ -224,10 +226,21 @@ void loop () {
     }
     // End New MQTT Stuff
 
-    // Button A: cycle through ATEM inputs (placeholder for now)
+    // Button A: cycle through ATEM inputs
     if (M5.BtnA.wasClicked()) {
-        // TODO: wire this up to real input selection state in ConfigState/TallyState
-        Serial.println("BtnA released -> would cycle ATEM input (not wired yet)");
+        g_tally.selectNextInput();
+
+        const AtemInputInfo* sel = g_tally.currentSelected();
+        if (sel) {
+            Serial.printf(
+                "BtnA -> selected input: %u %s (%s)\n",
+                sel->id,
+                sel->shortName.c_str(),
+                sel->longName.c_str()
+            );
+        } else {
+            Serial.println("BtnA -> no tally-enabled inputs available");
+        }
     }
 
     // Button B:
