@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Arduino.h>
+#include <M5Unified.h>
 #include <map>
 
 // High-level type from your JSON: "camera", "media", etc.

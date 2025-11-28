@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Arduino.h>
+#include <M5Unified.h>
 #include <ezTime.h>        // set #define EZTIME_CACHE_NVS in this file
 #include <WiFiManager.h>
 

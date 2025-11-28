@@ -29,6 +29,9 @@ void WiFi_setup () {
     const auto eff = g_config.effective();
     String hostname = eff.deviceName.length() ? eff.deviceName : eff.deviceId;
 
+    Serial.printf("[net] Effective NTP server from config: '%s'\n", eff.ntpServer.c_str());
+    Serial.printf("[net] Effective timezone from config: '%s'\n", eff.timeZone.c_str());
+
     WiFi.mode(WIFI_STA);
     WiFi.onEvent(WiFi_onEvent);
     WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
@@ -62,7 +65,7 @@ void WiFi_setup () {
 
     // ezTime
     if (currentScreen == SCREEN_STARTUP) startupLog("Initializing ezTime...", 1);
-    if (!localTime.setCache("timezone", "localTime")) localTime.setLocation(eff.timezone.c_str());
+    if (!localTime.setCache("timezone", "localTime")) localTime.setLocation(eff.timeZone.c_str());
     localTime.setDefault();
     setServer(eff.ntpServer.c_str());
     if (wm.getWLStatusString() != "WL_CONNECTED") {

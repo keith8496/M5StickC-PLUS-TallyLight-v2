@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Arduino.h>
+#include <M5Unified.h>
 #include "ConfigState.h"
 
 constexpr size_t BAT_WARNING_LEVEL_MAX_LEN   = 16;
