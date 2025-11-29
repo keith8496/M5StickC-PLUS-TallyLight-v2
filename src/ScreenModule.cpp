@@ -139,6 +139,17 @@ void refreshTallyScreen() {
         }
     }
 
+    // If disconnected, draw an "X" over the bar group to make it obvious
+    if (!wifiConnected) {
+        int groupLeft   = wifiX;
+        int groupRight  = wifiX + 3 * (barWidth + barSpacing) + barWidth; // right edge of last bar
+        int groupTop    = barBaseY - 10;  // top of tallest bar
+        int groupBottom = barBaseY;       // bottom of bars
+
+        tallyScreen.drawLine(groupLeft,  groupTop,    groupRight, groupBottom, wifiColor);
+        tallyScreen.drawLine(groupLeft,  groupBottom, groupRight, groupTop,    wifiColor);
+    }
+
     // MQTT icon (third segment center on the top row), aligned near the clock/SoC baseline
     int mqttX = mqttCenterX - 7;   // box is 14px wide
     int mqttY = row0Y + 2;         // positioned close to the Clock/SoC baseline
