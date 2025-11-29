@@ -78,9 +78,6 @@ struct GlobalConfig {
     int8_t wifiTxPowerDbm = ConfigDefaults::WIFI_TX_POWER_DBM;       
     WifiSleepMode wifiSleep = ConfigDefaults::WIFI_SLEEP;
     uint16_t statusIntervalSec = ConfigDefaults::STATUS_INTERVAL_SEC;
-
-    // Logging
-    LogLevel logLevel = ConfigDefaults::LOG_LEVEL;
 };
 
 // --- Per-device config ---------------------------------------
@@ -99,6 +96,9 @@ struct DeviceConfig {
 
     // Battery / SoC model
     uint16_t batteryCapacityMah = ConfigDefaults::BATTERY_CAPACITY_MAH; // SoC algorithm input
+
+    // Logging
+    LogLevel logLevel = ConfigDefaults::LOG_LEVEL;
 };
 
 // --- Effective config (merged view) --------------------------
@@ -178,7 +178,7 @@ struct ConfigState {
         e.ntp_isSynchronized = device.ntp_isSynchronized;
         e.batteryCapacityMah = device.batteryCapacityMah;
 
-        e.logLevel = global.logLevel;
+        e.logLevel = device.logLevel;
 
         return e;
     }

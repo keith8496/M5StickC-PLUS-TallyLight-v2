@@ -359,12 +359,12 @@ void refreshPowerScreen() {
     powerScreen.fillSprite(TFT_BLACK);
     powerScreen.setTextColor(TFT_WHITE);
     powerScreen.setCursor(0,0);
-    powerScreen.setTextSize(2);
+    powerScreen.setTextSize(1);
     powerScreen.println(F("Power Management"));
 
     powerScreen.setTextSize(1);
     powerScreen.println(pwr.powerMode);
-    powerScreen.printf("Bat: %s\r\n  V: %.3fv     %.1f%%\r\n", pwr.batWarningLevel, pwr.batVoltage, pwr.batPercentage);
+    powerScreen.printf("Bat: %s\r\n  V: %.3fv    %.1f%%/%.1f%%/ %.1f%%\r\n  Cap: %umAh -> %umAh\r\n", pwr.batWarningLevel, pwr.batVoltage, pwr.batPercentage, pwr.batPercentageCoulomb, pwr.batPercentageHybrid, pwr.learnedCapOld, pwr.learnedCapNew);
     powerScreen.printf("  I: %.3fma  Ic: %.3fma\r\n", pwr.batCurrent, pwr.batChargeCurrent);
     powerScreen.printf("  Imax: %ima  Bmm: (%.f%%/%.f%%) SB: %i\r\n", pwr.maxChargeCurrent, pwr.batPercentageMin, pwr.batPercentageMax, currentBrightness);
     powerScreen.printf("USB:\r\n  V: %.3fv  I: %.3fma\r\n", pwr.vbusVoltage, pwr.vbusCurrent);

@@ -10,8 +10,11 @@ class PubSubClient;
 
 struct StatusSnapshot {
     uint32_t uptimeSec = 0;
-    uint8_t  batteryPct = 0;
     uint16_t batteryMv = 0;
+    uint8_t  batteryPct = 0;
+    uint8_t  batPercentageCoulomb = 0;
+    uint8_t  batPercentageHybrid = 0;
+    uint16_t batterCampacityMah = 0;
     int8_t   rssi = 0;
     float    temperatureC = NAN;
     uint32_t restartCount = 0;
@@ -86,3 +89,7 @@ private:
     String topicDeviceRoot() const;       // sanctuary/tally/{device}
     String topicDeviceConfigRoot() const; // sanctuary/tally/{device}/config
 };
+
+// Global logging helper: prints to Serial and, if MQTT is connected,
+// publishes to the device's log topic using MqttClient::publishLog().
+void logf(LogLevel level, const char* fmt, ...);
