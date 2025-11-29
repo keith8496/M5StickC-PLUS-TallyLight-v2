@@ -4,12 +4,19 @@
 #include "ConfigState.h"
 #include "NetworkModule.h"
 #include "ScreenModule.h"
+#include "MqttClient.h"
+
 
 extern ConfigState g_config;
+extern MqttClient g_mqtt;
 
 WiFiManager wm;
 millisDelay ms_WiFi;
 Timezone localTime;
+static bool g_timeInitialized = false;
+static bool     g_timeInitRequested     = false;
+static uint32_t g_timeInitRequestedAtMs = 0;
+static constexpr uint32_t TIME_INIT_DEBOUNCE_MS = 2000; // 2s debounce
 
 
 // Define Functions
@@ -28,9 +35,6 @@ void WiFi_setup () {
 
     const auto eff = g_config.effective();
     String hostname = eff.deviceName.length() ? eff.deviceName : eff.deviceId;
-
-    Serial.printf("[net] Effective NTP server from config: '%s'\n", eff.ntpServer.c_str());
-    Serial.printf("[net] Effective timezone from config: '%s'\n", eff.timeZone.c_str());
 
     WiFi.mode(WIFI_STA);
     WiFi.onEvent(WiFi_onEvent);
@@ -62,28 +66,97 @@ void WiFi_setup () {
         if (currentScreen == SCREEN_STARTUP) startupLog("Config Portal Stopped...",1);
         //ESP.restart();
     }
+    
+}
 
-    // ezTime
-    if (currentScreen == SCREEN_STARTUP) startupLog("Initializing ezTime...", 1);
-    if (!localTime.setCache("timezone", "localTime")) localTime.setLocation(eff.timeZone.c_str());
-    localTime.setDefault();
-    setServer(eff.ntpServer.c_str());
-    if (wm.getWLStatusString() != "WL_CONNECTED") {
-        if (currentScreen == SCREEN_STARTUP) startupLog("ezTime initialization incomplete...", 1);
+// Internal helper: perform RTC/NTP initialization once per boot.
+static void doTimeInitOnce() {
+    if (g_timeInitialized) {
         return;
     }
-    waitForSync(60);
+
+    // Require MQTT connection before initializing time
+    if (!g_mqtt.isConnected()) {
+        Serial.println("[net] doTimeInitOnce: MQTT not connected, aborting.");
+        return;
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[net] doTimeInitOnce: WiFi not connected, aborting.");
+        if (currentScreen == SCREEN_STARTUP) {
+            startupLog("ezTime init: WiFi not connected", 1);
+        }
+        return;
+    }
+
+    if (currentScreen == SCREEN_STARTUP) {
+        startupLog("Initializing ezTime...", 1);
+    }
+
+    // Use global config strings so ezTime doesn't hold pointers into temporaries.
+    const String& ntpServer = g_config.global.ntpServer;
+    const String& tz        = g_config.global.timeZone;
+
+    Serial.println("[net] NTP Server: " + String(ntpServer));
+    Serial.println("[net] Timezone: " + String(tz));
+
+    if (!localTime.setCache("timezone", "localTime")) {
+        localTime.setLocation(tz.c_str());
+    }
+    localTime.setDefault();
+
+    setServer(ntpServer.c_str());
+
+    waitForSync(15);
     if (timeStatus() == timeSet) {
+        g_timeInitialized = true;
+        g_config.device.ntp_isSynchronized = true;
         Serial.println("UTC Time: " + UTC.dateTime(ISO8601));
         Serial.println("Local Time: " + localTime.dateTime(ISO8601));
         constexpr size_t BUFF_MAX_LEN   = 65;
         char buff[BUFF_MAX_LEN];
         snprintf(buff, sizeof(buff), "Local Time: %s", localTime.dateTime(ISO8601).c_str());
-        if (currentScreen == SCREEN_STARTUP) startupLog(buff, 1);
+        if (currentScreen == SCREEN_STARTUP) {
+            startupLog(buff, 1);
+        }
     } else {
-        if (currentScreen == SCREEN_STARTUP) startupLog("ezTime initialization failed...", 1);
+        Serial.println("[net] ezTime initialization failed...");
+        if (currentScreen == SCREEN_STARTUP) {
+            startupLog("ezTime initialization failed...", 1);
+        }
     }
-    
+}
+
+void requestTimeInit() {
+    g_timeInitRequested     = true;
+    g_timeInitRequestedAtMs = millis();
+}
+
+void requestTimeResync() {
+    // Allow a future NTP sync even if we already initialized once
+    g_timeInitialized = false;
+    g_config.device.ntp_isSynchronized = false;
+    requestTimeInit();
+}
+
+void serviceTimeInit() {
+    if (!g_timeInitRequested || g_timeInitialized) {
+        return;
+    }
+
+    uint32_t now = millis();
+    if (now - g_timeInitRequestedAtMs < TIME_INIT_DEBOUNCE_MS) {
+        return; // still debouncing
+    }
+
+    // Don’t clear the request until network is actually ready
+    if (!g_mqtt.isConnected() || WiFi.status() != WL_CONNECTED) {
+        return; // keep g_timeInitRequested = true; we'll try again next loop
+    }
+
+    // Network is ready and debounce interval has passed: do one-time init
+    g_timeInitRequested = false;
+    doTimeInitOnce();
 }
 
 
@@ -124,7 +197,6 @@ void WiFi_onEvent(WiFiEvent_t event) {
       case ARDUINO_EVENT_WIFI_STA_GOT_IP:
           Serial.print(F("Obtained IP address: "));
           Serial.println(WiFi.localIP());
-          updateNTP();
           if (currentScreen == SCREEN_STARTUP) {
             char buff[65];
             snprintf(buff, sizeof(buff), "Obtained IP address: %s", WiFi.localIP().toString().c_str());
@@ -214,4 +286,3 @@ void WiFi_onEvent(WiFiEvent_t event) {
   }
 
 }
-
