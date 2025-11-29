@@ -4,7 +4,7 @@
 
 void cycleBrightness() {
     // Discrete brightness levels we cycle through
-    static const int levels[] = {10, 30, 50, 80, 100};
+    static const int levels[] = {20, 30, 40, 50, 60, 70, 80, 90, 100};
     static const size_t numLevels = sizeof(levels) / sizeof(levels[0]);
 
     // Find the nearest level at or above the current setting
