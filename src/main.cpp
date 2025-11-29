@@ -231,6 +231,11 @@ void loop () {
                 requestTimeResync();
                 break;
 
+            case MqttCommandType::selectNextInput:
+                Serial.println("MQTT: selectNextInput command received");
+                g_tally.selectNextInput();
+                break;
+
             case MqttCommandType::None:
             default:
                 break;

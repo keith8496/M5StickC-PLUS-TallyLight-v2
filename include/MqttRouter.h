@@ -12,7 +12,8 @@ enum class MqttCommandType : uint8_t {
     Reboot,
     OtaUpdate,
     FactoryReset,
-    ResyncTime
+    ResyncTime,
+    selectNextInput
 };
 
 struct MqttCommand {
