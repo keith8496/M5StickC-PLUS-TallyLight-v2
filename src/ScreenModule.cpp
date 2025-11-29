@@ -86,17 +86,58 @@ void refreshTallyScreen() {
     tallyScreen.setCursor(timeX, row0Y);
     tallyScreen.print(timeStr);
 
-    // WiFi icon (second segment center on the top row), aligned near the clock/SoC baseline
-    int wifiX = wifiCenterX - 3;   // icon is ~7px wide
-    int wifiY = row0Y + 0;         // positioned close to the Clock/SoC baseline
+    // WiFi icon (second segment center on the top row), now using 1–4 bars based on RSSI
+    int wifiX = wifiCenterX - 5;   // left edge of bars group
+    int wifiY = row0Y + 2;         // baseline for the bars
     bool wifiConnected = (WiFi.status() == WL_CONNECTED);
+    int32_t rssi = WiFi.RSSI();
+
+    // Map RSSI to number of bars (0–4)
+    // Excellent:   > -60 dBm  -> 4 bars
+    // Good:       -65 to -60  -> 3 bars
+    // Acceptable: -70 to -65  -> 2 bars
+    // Weak:       <= -70      -> 1 bar (if connected)
+    uint8_t wifiBars = 0;
+    if (wifiConnected) {
+        if (rssi > -60) {
+            wifiBars = 4;
+        } else if (rssi > -65) {
+            wifiBars = 3;
+        } else if (rssi > -70) {
+            wifiBars = 2;
+        } else {
+            wifiBars = 1;
+        }
+    }
+
     uint16_t wifiColor = wifiConnected ? TFT_WHITE : TFT_DARKGREY;
 
-    // Slightly larger WiFi "fan" icon
-    tallyScreen.drawLine(wifiX + 2, wifiY + 9, wifiX + 3, wifiY + 9, wifiColor);
-    tallyScreen.drawLine(wifiX + 1, wifiY + 8, wifiX + 4, wifiY + 8, wifiColor);
-    tallyScreen.drawLine(wifiX,     wifiY + 7, wifiX + 5, wifiY + 7, wifiColor);
-    tallyScreen.drawLine(wifiX - 1, wifiY + 6, wifiX + 6, wifiY + 6, wifiColor);
+    // Draw up to 4 vertical bars, left to right, increasing height
+    const int barWidth   = 2;
+    const int barSpacing = 1;
+    const int barBaseY   = wifiY + 10;  // bottom of the tallest bar
+
+    for (int i = 0; i < 4; ++i) {
+        int barHeight;
+        switch (i) {
+            case 0: barHeight = 3;  break;  // weakest
+            case 1: barHeight = 6;  break;
+            case 2: barHeight = 8;  break;
+            case 3: barHeight = 10; break;  // strongest
+            default: barHeight = 0; break;
+        }
+
+        int barX = wifiX + i * (barWidth + barSpacing);
+        int barY = barBaseY - barHeight;
+
+        if (wifiBars > i) {
+            // Filled bar for active signal level
+            tallyScreen.fillRect(barX, barY, barWidth, barHeight, wifiColor);
+        } else {
+            // Outline only for inactive bars (optional)
+            tallyScreen.drawRect(barX, barY, barWidth, barHeight, wifiColor);
+        }
+    }
 
     // MQTT icon (third segment center on the top row), aligned near the clock/SoC baseline
     int mqttX = mqttCenterX - 7;   // box is 14px wide
