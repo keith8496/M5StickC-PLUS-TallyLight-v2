@@ -26,7 +26,6 @@ namespace ConfigDefaults {
     constexpr const uint16_t    MQTT_PORT     = 1883;
     constexpr const char* MQTT_USERNAME = "";
     constexpr const char* MQTT_PASSWORD = "";
-    constexpr const bool  MQTT_IS_CONNECTED = false;
     constexpr const char* NTP_SERVER_DEFAULT    = "us.pool.ntp.org";
     constexpr const char* TIMEZONE      = "Etc/UTC"; // Example time zones: "America/Chicago", "GMT-6"
 
@@ -94,7 +93,9 @@ struct DeviceConfig {
     // Mutable from MQTT
     String friendlyName = ConfigDefaults::FRIENDLY_NAME;
     uint8_t atemInput = ConfigDefaults::ATEAM_INPUT_DEFAULT; 
-    bool mqtt_isConnected = ConfigDefaults::MQTT_IS_CONNECTED;
+    //bool wifi_isConnected = false;
+    bool mqtt_isConnected = false;
+    bool ntp_isSynchronized = false;
 
     // Battery / SoC model
     uint16_t batteryCapacityMah = ConfigDefaults::BATTERY_CAPACITY_MAH; // SoC algorithm input
@@ -130,7 +131,9 @@ struct EffectiveConfig {
 
     // Per-device
     uint8_t atemInput;
+    bool wifi_isConnected;
     bool mqtt_isConnected;
+    bool ntp_isSynchronized;
     uint16_t batteryCapacityMah;
 
     // Logging
@@ -170,7 +173,9 @@ struct ConfigState {
         e.statusIntervalSec = global.statusIntervalSec;
 
         e.atemInput          = device.atemInput;
+        //e.wifi_isConnected   = device.wifi_isConnected;
         e.mqtt_isConnected   = device.mqtt_isConnected;
+        e.ntp_isSynchronized = device.ntp_isSynchronized;
         e.batteryCapacityMah = device.batteryCapacityMah;
 
         e.logLevel = global.logLevel;

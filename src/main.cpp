@@ -82,7 +82,7 @@ void setup () {
 
     currentBrightness = 50;
     setBrightness(currentBrightness);
-    g_buttons.begin(600);  // 600 ms long-press threshold
+    g_buttons.begin(500);  // 500 ms long-press threshold
 
     // Set deviceId and friendly deviceName
     uint8_t macAddress[6];
@@ -98,33 +98,48 @@ void setup () {
     // Build deviceName
     g_config.device.deviceName = "M5StickC-Plus-" + g_config.device.deviceId;
     
-    changeScreen(0);
+    changeScreen(SCREEN_STARTUP);
     startupLog("Starting...", 1);
+    
+    // Preferences
     startupLog("Initializing preferences...", 1);
     preferences_setup();
-    startupLog("Initializing power management...", 1);
-    power_setup();
-    startupLog("Initializing WiFi...", 1);
-    WiFi_setup();
-    ms_startup.start(30000);
     prefs_applyToConfig(g_config);
     
-    // --- Initialize MQTT ---
-    startupLog("Initializing MQTT...", 1);
-    g_bootMillis = millis();
-    g_mqtt.setMessageHandler(onMqttMessage);
-    g_mqtt.begin();
+    // Power Management
+    startupLog("Initializing power management...", 1);
+    power_setup();
+    power_onLoop();  // initial read
 
+    ms_startup.start(30000);
+    bool wifi_isInited = false;
+    bool mqtt_isInited = false;
     while (ms_startup.isRunning()) {
+        
+        if (!wifi_isInited) {
+            wifi_isInited = true;
+            startupLog("Initializing WiFi...", 1);
+            WiFi_setup();
+        }
 
         WiFi_onLoop();
-        power_onLoop();
 
-        // Pump MQTT client while waiting
+        if (!mqtt_isInited && WiFi.status() == WL_CONNECTED) {
+            mqtt_isInited = true;
+            startupLog("Initializing MQTT...", 1);
+            g_bootMillis = millis();
+            g_mqtt.setMessageHandler(onMqttMessage);
+            g_mqtt.begin();
+        }
+
         g_mqtt.loop();
 
-        // When connected and time is set, finish startup.
-        if (g_mqtt.isConnected() && (timeStatus() == timeSet)) {
+        if (!g_config.device.ntp_isSynchronized) {
+            // Will loop until NTP sync or timeout
+            serviceTimeInit();
+        }
+
+        if (wifi_isInited && mqtt_isInited && g_config.device.ntp_isSynchronized) {
             ms_startup.stop();
             startupLog("Startup complete.", 1);
         }
@@ -134,35 +149,36 @@ void setup () {
             ms_startup.stop();
             startupLog("Startup incomplete.", 1);
         }
+
     }
       
     startupLog("", 1);
-    //startupLog("Press \"M5\" button \r\nto continue.", 2);
-    changeScreen(-1);
-
-
-    #if TPS
-        ms_tps.start(1000);
-        ms_runningAvg.start(60000);
-    #endif
+    changeScreen(SCREEN_TALLY);
 
     // Init task watchdog: 60s timeout, panic = true (print backtrace & reset)
     esp_task_wdt_init(60, true);
     // Watch the current (Arduino) task
     esp_task_wdt_add(NULL);
+
+    #if TPS
+        ms_tps.start(1000);
+        ms_runningAvg.start(60000);
+    #endif
     
 }
 
+
 void loop () {
 
-    M5.update();
-    events();               // ezTime
-    WiFi_onLoop();
-    //webSockets_onLoop();
-    power_onLoop();
+    // Feed the watchdog
+    esp_task_wdt_reset();
 
-    // Begin New MQTT Stuff
+    M5.update();
+    power_onLoop();
+    WiFi_onLoop();
     g_mqtt.loop();
+    serviceTimeInit();      // first time NTP
+    events();               // ezTime
 
     // Periodic status publish
     static uint32_t lastStatusMs = 0;
@@ -207,12 +223,16 @@ void loop () {
                 Serial.println("Would FactoryReset (ignoring for now)");
                 break;
 
+            case MqttCommandType::ResyncTime:
+                Serial.println("MQTT: ResyncTime command received");
+                requestTimeResync();
+                break;
+
             case MqttCommandType::None:
             default:
                 break;
         }
     }
-    // End New MQTT Stuff
 
     ButtonEvent ev = g_buttons.poll();
     if (ev.type != ButtonType::None) {
@@ -220,9 +240,6 @@ void loop () {
     }
 
     refreshScreen();
-
-    // Feed the watchdog
-    esp_task_wdt_reset();
 
     #if TPS
         if (ms_tps.justFinished()) {
