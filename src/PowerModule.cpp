@@ -8,6 +8,8 @@
 #include "ScreenModule.h"
 #include "ConfigState.h"
 #include "PowerModule.h"
+#include "PrefsModule.h"
+#include "MqttClient.h"
 
 
 extern int currentBrightness;
@@ -15,10 +17,10 @@ extern ConfigState g_config;
 
 power pwr;
 
-static const int md_power_milliseconds = 100;
+static const int md_power_milliseconds = 250;
 static millisDelay md_power;
 //static millisDelay md_chargeControlWait;
-static const int runningAvgCnt = 200;
+static const int runningAvgCnt = 16;
 static RunningAverage ravg_batVoltage(runningAvgCnt);
 
 // --- AXP192 helpers on top of M5Unified --------------------------------------
@@ -103,6 +105,81 @@ static const int chargeControlSteps = 9;
 static const uint8_t chargeControlArray[chargeControlSteps] = {0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8};
 static const int chargeCurrentArray[chargeControlSteps] = {100, 190, 280, 360, 450, 550, 630, 700, 780};
 
+static bool s_capacityLearnedThisCycle = false;
+
+// Learn effective battery capacity (mAh) from a near-full-to-near-empty discharge
+// cycle. This should only be called when we are truly near empty and running on
+// battery power. It updates g_config.device.batteryCapacityMah using a slow EMA
+// so random glitches don't cause big jumps.
+static void learnBatteryCapacityFromCycle() {
+    if (s_capacityLearnedThisCycle) {
+        return;
+    }
+
+    // Only when running on battery (no external VIN/VBUS present).
+    if (pwr.vinVoltage > 3.8f || pwr.vbusVoltage > 3.8f) {
+        return;
+    }
+
+    // Only when we're really near empty, not just at the low-battery threshold.
+    // We treat <= 3.30V as "effectively empty" for learning purposes.
+    if (pwr.batVoltage > 3.30f) {
+        return;
+    }
+
+    uint16_t oldCap = g_config.device.batteryCapacityMah;
+    if (oldCap == 0) {
+        return;  // misconfigured; nothing to learn against
+    }
+
+    // We anchor the coulomb counter at full (0 mAh == 100% SoC). As we discharge,
+    // pwr.coulombCount goes negative. The total discharged capacity for this cycle
+    // is therefore -coulombCount.
+    float discharged_mAh = -pwr.coulombCount;
+    if (discharged_mAh <= 0.0f) {
+        return;
+    }
+
+    // Sanity check: require the observed capacity to be within a reasonable band
+    // around the current configured capacity. This filters out partial cycles and
+    // wild readings.
+    float minCap = oldCap * 0.5f;
+    float maxCap = oldCap * 1.5f;
+    if (discharged_mAh < minCap || discharged_mAh > maxCap) {
+        return;
+    }
+
+    // Exponential moving average: mostly trust the existing capacity, but slowly
+    // fold in the new observation.
+    float newCap = oldCap * 0.9f + discharged_mAh * 0.1f;
+    uint16_t newCapRounded = static_cast<uint16_t>(newCap + 0.5f);
+
+    // Update the in-memory config so subsequent SoC calculations use the
+    // learned capacity for the rest of this run.
+    g_config.device.batteryCapacityMah = newCapRounded;    
+    
+    // Expose last-learned values for the power screen / debug UI.
+    pwr.learnedCapOld = oldCap;
+    pwr.learnedCapNew = newCapRounded;
+
+    #ifdef DEBUG_POWER
+    logf(
+        LogLevel::Debug,
+        "[POWER] Capacity learn: old=%umAh  new=%umAh  discharged=%.1fmAh  Vbat=%.3fV\n",
+        static_cast<unsigned>(oldCap),
+        static_cast<unsigned>(newCapRounded),
+        discharged_mAh,
+        pwr.batVoltage
+    );
+    #endif
+
+    // NOTE: preferences_save() currently only persists MQTT settings. The
+    // effective battery capacity still comes from MQTT at boot. Once we move
+    // batteryCapacityMah into NVS, we can persist newCapRounded here as well.
+
+    s_capacityLearnedThisCycle = true;
+}
+
 
 // Define Functions
 void power_onLoop();
@@ -111,76 +188,94 @@ void doPowerManagement();
 
 // Function to estimate battery percentage with a non-linear discharge curve
 float getBatPercentageVoltage(float voltage) {
-    
-  // Voltage-capacity segments for a single-cell LiPo battery
   const int numLevels = 21;
-  const float batLookup_v3[numLevels][2] = {
-    {4.20, 100.0}, 
-    {4.12, 95.0}, 
-    {4.04, 90.0}, 
-    {3.98, 85.0}, 
-    {3.92, 80.0}, 
-    {3.86, 75.0}, 
-    {3.80, 70.0}, 
-    {3.75, 65.0}, 
-    {3.71, 60.0}, 
-    {3.68, 55.0}, 
-    {3.66, 50.0}, 
-    {3.64, 45.0}, 
-    {3.62, 40.0}, 
-    {3.61, 35.0}, 
-    {3.60, 30.0}, 
-    {3.56, 25.0}, 
-    {3.54, 20.0}, 
-    {3.50, 15.0}, 
-    {3.47, 10.0}, 
-    {3.40, 5.0}, 
-    {3.00, 0.0}
+  // {Voltage, SoC%}, sorted high → low voltage
+  const float batLookup_v4[numLevels][2] = {
+    {4.20f, 100.0f},
+    {4.12f,  95.0f},
+    {4.06f,  90.0f},
+    {4.02f,  85.0f},
+    {3.98f,  80.0f},
+    {3.94f,  75.0f},
+    {3.90f,  70.0f},
+    {3.86f,  65.0f},
+    {3.82f,  60.0f},
+    {3.78f,  55.0f},
+    {3.74f,  50.0f},
+    {3.70f,  45.0f},
+    {3.66f,  40.0f},
+    {3.62f,  35.0f},
+    {3.58f,  30.0f},
+    {3.52f,  25.0f},
+    {3.46f,  20.0f},
+    {3.40f,  15.0f},
+    {3.34f,  10.0f},
+    {3.28f,   5.0f},
+    {3.20f,   0.0f}
   };
 
-  // Check for out-of-range values
-  if (voltage >= batLookup_v3[0][0]) {
-      return 100.0; // Fully charged
-  } else if (voltage <= batLookup_v3[numLevels - 1][0]) {
-      return 0.0;   // Fully discharged
+  if (voltage >= batLookup_v4[0][0]) {
+    return 100.0f;
+  }
+  if (voltage <= batLookup_v4[numLevels - 1][0]) {
+    return 0.0f;
   }
 
-  // Interpolate within the appropriate segment
   for (int i = 0; i < numLevels - 1; i++) {
-      if (voltage <= batLookup_v3[i][0] && voltage > batLookup_v3[i + 1][0]) {
-          // Linear interpolation between the two points
-          float percentage = batLookup_v3[i][1] +
-                            (voltage - batLookup_v3[i][0]) * 
-                            (batLookup_v3[i + 1][1] - batLookup_v3[i][1]) /
-                            (batLookup_v3[i + 1][0] - batLookup_v3[i][0]);
-          return percentage;
-      }
+    float vHigh = batLookup_v4[i][0];
+    float vLow  = batLookup_v4[i + 1][0];
+
+    if (voltage <= vHigh && voltage > vLow) {
+      float socHigh = batLookup_v4[i][1];
+      float socLow  = batLookup_v4[i + 1][1];
+
+      float t = (voltage - vHigh) / (vLow - vHigh);  // 0..1
+      return socHigh + t * (socLow - socHigh);
+    }
   }
 
-  // Default return (should not reach here)
-  return 0.0;
-
+  // Should never hit this, but be safe:
+  return 0.0f;
 }
 
 float getBatPercentageCoulomb() {
-  const uint16_t g_batteryCapacity = g_config.device.batteryCapacityMah;
-  const float bat = (g_batteryCapacity + pwr.coulombCount) / g_batteryCapacity * 100;
-  if (bat > 100.0) {
-    return 100.0;
-  } else if (bat < 0.0) {
-    return 0.0;
-  } else {
-    return bat;
+  const uint16_t cap = g_config.device.batteryCapacityMah;
+
+  if (cap == 0) {
+      return NAN;  // misconfigured; treat as invalid
   }
+
+  // We assume the coulomb counter was cleared at a known-full state (e.g. during
+  // bench calibration or a proper "charge-to-off" cycle), so 0 mAh corresponds
+  // to 100% SoC. As the device discharges, pwr.coulombCount becomes negative,
+  // reducing the computed SoC.
+  float bat = (cap + pwr.coulombCount) / cap * 100.0f;
+
+  if (bat > 100.0f) bat = 100.0f;
+  if (bat <   0.0f) bat = 0.0f;
+  return bat;
 }
 
-/*float getBatPercentage(float voltage) {
-  //const float alpha = 0.7;
-  //const float batPercentageVoltage = getBatPercentageVoltage(voltage);
-  //const float batPercentageCoulomb = getBatPercentageCoulomb();
-  //return (batPercentageVoltage * (1-alpha)) + (batPercentageCoulomb * alpha);
-  return getBatPercentageCoulomb();
-}*/
+float getBatPercentageHybrid() {
+    float socV = pwr.batPercentage;          // voltage-based (already smoothed)
+    float socC = pwr.batPercentageCoulomb;   // NAN if not calibrated
+
+    if (isnan(socC)) return socV;
+
+    // Coulomb is great in the middle; trust voltage at edges
+    if (socV < 10.0f || socV > 95.0f) {
+        return socV;
+    }
+
+    // Reject insane CC readings
+    if (fabsf(socC - socV) > 20.0f) {
+        return socV;
+    }
+
+    // Blend them
+    constexpr float alpha = 0.6f;   // weight toward CC
+    return socV * (1.0f - alpha) + socC * alpha;
+}
 
 int getChargeCurrent() {
   const uint8_t chargeControlNow = axpRead8(0x33);
@@ -193,38 +288,8 @@ int getChargeCurrent() {
 }
 
 
-/*void setChargeCurrent(int reqChargeCurrent) {
-  
-  if (reqChargeCurrent == 100) {
-    md_chargeControlWait.stop();
-  }
-  if (reqChargeCurrent == getChargeCurrent()) {
-    return;
-  }
-  if (md_chargeControlWait.isRunning()) {
-    return;
-  }
-  
-  uint8_t reqChargeControl = 0xc0;
-  for (int i = 0; i < chargeControlSteps; i++) {
-    if (reqChargeCurrent == chargeCurrentArray[i]) {
-      reqChargeControl = chargeControlArray[i];
-      break;
-    }
-  }
-  
-  axpWrite8(0x33, reqChargeControl);
-  pwr.maxChargeCurrent = getChargeCurrent();
-  md_chargeControlWait.start(20000);
-
-}*/
-
-
 void power_setup() {
-  // Start the AXP192 coulomb counter and clear it so net mAh starts from 0.
   axpEnableCoulombCounter();
-  axpClearCoulombCounter();
-
   doPowerManagement();
   ravg_batVoltage.fillValue(M5.Power.Axp192.getBatteryVoltage(), runningAvgCnt);
   md_power.start(md_power_milliseconds);
@@ -261,9 +326,17 @@ void doPowerManagement() {
     snprintf(pwr.batWarningLevel, sizeof(pwr.batWarningLevel), "%s", warning);
   }
 
-  pwr.batPercentage    = getBatPercentageCoulomb();
+  // 1) Voltage SoC (production)
+  pwr.batPercentage    = getBatPercentageVoltage(ravg_batVoltage.getFastAverage());
   pwr.batPercentageMin = getBatPercentageVoltage(ravg_batVoltage.getMinInBuffer());
   pwr.batPercentageMax = getBatPercentageVoltage(ravg_batVoltage.getMaxInBuffer());
+
+  // 2) Coulomb SoC (experimental, debug-only for now)
+  float socC = getBatPercentageCoulomb();
+  pwr.batPercentageCoulomb = socC;
+
+  // 3) Hybrid SoC (voltage + coulomb blended)
+  pwr.batPercentageHybrid = getBatPercentageHybrid();
 
   // Approximate net battery current from separate charge / discharge readings.
   float charge_mA    = M5.Power.Axp192.getBatteryChargeCurrent();
@@ -325,7 +398,8 @@ void doPowerManagement() {
       // Charge to Off
       
       if (md_chargeToOff.justFinished()) {
-        axpClearCoulombCounter();
+        axpClearCoulombCounter();   // 0 mAh == 100%
+        pwr.coulombCount = 0.0f;    // keep RAM in sync
         M5.Power.powerOff();
       }
 
@@ -368,15 +442,16 @@ void doPowerManagement() {
       const char* mode = "Low Battery";
       snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       pwr.maxBrightness = g_powersaverBrightness;
+
       if (md_lowBattery.justFinished()) {
         md_lowBattery.repeat();
-        // Coulomb counting is available again, but automatic capacity
-        // recalibration can be risky. Leave this disabled for now until
-        // behaviour is validated in the field.
-        // g_batteryCapacity = pwr.coulombCount * (-1);
-        // preferences_save();
+        learnBatteryCapacityFromCycle();
       } else if (!md_lowBattery.isRunning()) {
-        md_lowBattery.start(60000);
+        // First time we drop into the low-battery region for this cycle; arm
+        // the timer and allow a capacity-learning attempt once the system has
+        // been stably low for a while.
+        s_capacityLearnedThisCycle = false;
+        md_lowBattery.start(60000);  // 60s of sustained low-battery before learning
       }
     } else if (floor(pwr.batPercentageMin) <= g_powersaverBatteryPct) {
       const char* mode = "Power Saver";
@@ -392,7 +467,8 @@ void doPowerManagement() {
   }
 
   #ifdef DEBUG_POWER
-  Serial.printf(
+  logf(
+      LogLevel::Debug,
       "[POWER] Vbat=%.3fV  Vbus=%.3fV  Vin=%.3fV  Icharge=%.1fmA  Idischarge=%.1fmA  "
       "Inet=%.1fmA  Coulomb=%.2fmAh  SoC=%.1f%%  Mode=%s  Bright=%d/%d\n",
       pwr.batVoltage,

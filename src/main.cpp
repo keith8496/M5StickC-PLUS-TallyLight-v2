@@ -45,11 +45,14 @@ MqttCommand g_pendingCommand;  // global or static
 StatusSnapshot buildStatusSnapshot() {
     StatusSnapshot st;
     st.uptimeSec = (millis() - g_bootMillis) / 1000;
+    st.batteryMv  = static_cast<uint16_t>(pwr.batVoltage * 1000.0f);
     float batPct = pwr.batPercentage;
     if (batPct < 0.0f) batPct = 0.0f;
     else if (batPct > 100.0f) batPct = 100.0f;
     st.batteryPct = static_cast<uint8_t>(batPct + 0.5f);
-    st.batteryMv  = static_cast<uint16_t>(pwr.batVoltage * 1000.0f);
+    st.batPercentageCoulomb = static_cast<uint8_t>(pwr.batPercentageCoulomb + 0.5f);
+    st.batPercentageHybrid   = static_cast<uint8_t>(pwr.batPercentageHybrid + 0.5f);
+    st.batterCampacityMah   = g_config.device.batteryCapacityMah;
     st.rssi       = static_cast<int8_t>(WiFi.RSSI());
     st.temperatureC = pwr.tempInAXP192;
     st.firmwareVersion = F("2.0.0-mqtt");
