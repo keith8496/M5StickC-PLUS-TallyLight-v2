@@ -47,6 +47,7 @@ static MqttCommandType parseCommand(const String& payload) {
     if (v == "ota_update")   return MqttCommandType::OtaUpdate;
     if (v == "factory_reset")return MqttCommandType::FactoryReset;
     if (v == "resync_time")   return MqttCommandType::ResyncTime;
+    if (v == "select_next_input")   return MqttCommandType::selectNextInput;
     return MqttCommandType::None;
 }
 

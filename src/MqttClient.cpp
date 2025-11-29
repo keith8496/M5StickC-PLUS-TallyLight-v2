@@ -156,10 +156,28 @@ void MqttClient::publishStatus(const StatusSnapshot& st)
 }
 
 void MqttClient::publishSelectedInput(uint8_t input) {
-    // Schedule a debounced publish of the selected input.
+    // Schedule a debounced publish of the selected input (numeric ID).
     _pendingSelectedInput            = input;
     _hasPendingSelectedInput         = true;
     _pendingSelectedInputChangedAtMs = millis();
+
+    // Also publish the ATEM short and long names for this input immediately, if known.
+    const AtemInputInfo* info = _tally.findInput(input);
+    if (_connected && _mqtt && info) {
+        const String root = topicDeviceRoot() + "/" + STATUS_ROOT_SUBTOPIC + "/";
+
+        // Publish short_name
+        if (info->shortName.length() > 0) {
+            String topicShort = root + "short_name";
+            _mqtt->publish(topicShort.c_str(), info->shortName.c_str(), false);
+        }
+
+        // Publish long_name
+        if (info->longName.length() > 0) {
+            String topicLong = root + "long_name";
+            _mqtt->publish(topicLong.c_str(), info->longName.c_str(), false);
+        }
+    }
 }
 
 void MqttClient::publishTallyColor(const String& color) {
