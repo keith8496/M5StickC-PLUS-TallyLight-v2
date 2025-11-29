@@ -52,8 +52,8 @@ void ButtonRouter::handle(const ButtonEvent& ev) {
         case ButtonID::B:
             if (ev.type == ButtonType::LongPress) {
                 // BtnB long = change screen
-                Serial.println("BtnB long press -> changeScreen(-1)");
-                changeScreen(-1);
+                Serial.println("BtnB long press -> toggleMainTab()");
+                toggleMainTab();
             } else if (ev.type == ButtonType::ShortPress) {
                 // BtnB short = brightness
                 Serial.println("BtnB short press -> cycleBrightness()");

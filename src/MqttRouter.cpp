@@ -1,6 +1,8 @@
 #include <ArduinoJson.h>
 #include "MqttRouter.h"
 #include "MqttClient.h"
+#include "NetworkModule.h"
+
 extern MqttClient g_mqtt;
 
 // Spec constants
@@ -44,6 +46,7 @@ static MqttCommandType parseCommand(const String& payload) {
     if (v == "reboot")       return MqttCommandType::Reboot;
     if (v == "ota_update")   return MqttCommandType::OtaUpdate;
     if (v == "factory_reset")return MqttCommandType::FactoryReset;
+    if (v == "resync_time")   return MqttCommandType::ResyncTime;
     return MqttCommandType::None;
 }
 
@@ -133,8 +136,10 @@ static void handleGlobalConfig(ConfigState& cfg, const String& key, const String
         cfg.global.mqttPassword = payload;
     } else if (key == "ntp_server") {
         cfg.global.ntpServer = payload;
+        requestTimeInit();   // debounce: mark time init requested
     } else if (key == "timezone") {
         cfg.global.timeZone = payload;
+        requestTimeInit();   // debounce: mark time init requested
     }
 
     // Display / tally

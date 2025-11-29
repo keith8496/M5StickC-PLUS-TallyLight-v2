@@ -48,4 +48,7 @@ private:
     // Internal helpers
     ButtonEvent handleButtonA(bool isDown, uint32_t nowMs);
     ButtonEvent handleButtonB(bool isDown, uint32_t nowMs);
+
+    bool _aLongPressFired;
+    bool _bLongPressFired;
 };
