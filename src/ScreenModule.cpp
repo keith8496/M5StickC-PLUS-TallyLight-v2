@@ -227,19 +227,19 @@ void refreshTallyScreen() {
         }
     }
 
-    // Determine labels for current PREV and PROG buses by scanning known input IDs
+    // Determine labels for current PREV and PROG buses by scanning known inputs
     String prevLabel;
     String progLabel;
-    for (uint8_t id = 1; id <= 32; ++id) {
-        const AtemInputInfo* info = g_tally.findInput(id);
-        if (!info) continue;
+    for (const auto& kv : g_tally.inputs) {
+        uint8_t id = kv.first;
+        const AtemInputInfo& info = kv.second;
 
         // Build a display label for this input
         String label;
-        if (info->shortName.length()) {
-            label = info->shortName;
-        } else if (info->longName.length()) {
-            label = info->longName;
+        if (info.shortName.length()) {
+            label = info.shortName;
+        } else if (info.longName.length()) {
+            label = info.longName;
         } else {
             label = String(id);
         }
