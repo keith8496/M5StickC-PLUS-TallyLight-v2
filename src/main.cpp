@@ -234,6 +234,7 @@ void loop () {
             case MqttCommandType::selectNextInput:
                 Serial.println("MQTT: selectNextInput command received");
                 g_tally.selectNextInput();
+                g_mqtt.publishSelectedInput(g_tally.selectedInput);
                 break;
 
             case MqttCommandType::None:
