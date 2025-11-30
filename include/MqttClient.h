@@ -14,7 +14,7 @@ struct StatusSnapshot {
     uint8_t  batteryPct = 0;
     uint8_t  batPercentageCoulomb = 0;
     uint8_t  batPercentageHybrid = 0;
-    uint16_t batterCampacityMah = 0;
+    float    coulombCount = 0;
     int8_t   rssi = 0;
     float    temperatureC = NAN;
     uint32_t restartCount = 0;
