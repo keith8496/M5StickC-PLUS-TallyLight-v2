@@ -52,7 +52,7 @@ StatusSnapshot buildStatusSnapshot() {
     st.batteryPct = static_cast<uint8_t>(batPct + 0.5f);
     st.batPercentageCoulomb = static_cast<uint8_t>(pwr.batPercentageCoulomb + 0.5f);
     st.batPercentageHybrid   = static_cast<uint8_t>(pwr.batPercentageHybrid + 0.5f);
-    st.batterCampacityMah   = g_config.device.batteryCapacityMah;
+    st.coulombCount   = pwr.coulombCount;
     st.rssi       = static_cast<int8_t>(WiFi.RSSI());
     st.temperatureC = pwr.tempInAXP192;
     st.firmwareVersion = F("2.0.0-mqtt");

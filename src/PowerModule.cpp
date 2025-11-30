@@ -11,6 +11,9 @@
 #include "PrefsModule.h"
 #include "MqttClient.h"
 
+//#include "CoulombCounter.h"
+#include "Wire.h"
+
 
 extern int currentBrightness;
 extern ConfigState g_config;
@@ -24,80 +27,73 @@ static const int runningAvgCnt = 16;
 static RunningAverage ravg_batVoltage(runningAvgCnt);
 
 // --- AXP192 helpers on top of M5Unified --------------------------------------
-//
-// We mirror just enough of the original M5StickC AXP192 API to keep the old
-// power logic working, but implemented in terms of M5.Power.Axp192.
-//
-static inline uint8_t axpRead8(uint8_t addr) {
-    return M5.Power.Axp192.readRegister8(addr);
+
+void axpWrite1Byte(uint8_t Addr, uint8_t Data) {
+    Wire1.beginTransmission(0x34);
+    Wire1.write(Addr);
+    Wire1.write(Data);
+    Wire1.endTransmission();
 }
 
-static inline void axpWrite8(uint8_t addr, uint8_t data) {
-    M5.Power.Axp192.writeRegister8(addr, data);
+uint8_t axpRead8bit(uint8_t Addr) {
+    Wire1.beginTransmission(0x34);
+    Wire1.write(Addr);
+    Wire1.endTransmission();
+    Wire1.requestFrom(0x34, 1);
+    return Wire1.read();
 }
 
-static inline uint32_t axpRead32(uint8_t addr) {
-    // AXP192 32-bit counters are stored big-endian across four consecutive
-    // registers. We reconstruct the 32-bit value manually using the public
-    // 8-bit accessor.
-    uint32_t value = 0;
-    value |= static_cast<uint32_t>(axpRead8(addr))     << 24;
-    value |= static_cast<uint32_t>(axpRead8(addr + 1)) << 16;
-    value |= static_cast<uint32_t>(axpRead8(addr + 2)) << 8;
-    value |= static_cast<uint32_t>(axpRead8(addr + 3));
-    return value;
-}
-
-// Coulomb-counter control (based on the old AXP192::Enable/ Clear /GetCoulombData)
-static void axpEnableCoulombCounter() {
-    // 0xB8: Coulomb counter control; bit7 = enable
-    axpWrite8(0xB8, 0x80);
-}
-
-static void axpClearCoulombCounter() {
-    // Set the clear flag (bit5) in 0xB8 while preserving other bits.
-    uint8_t reg = axpRead8(0xB8);
-    axpWrite8(0xB8, reg | 0x20);
-}
-
-static uint32_t axpGetCoulombChargeRaw() {
-    // 0xB0–0xB3: charge coulomb counter (32-bit)
-    return axpRead32(0xB0);
-}
-
-static uint32_t axpGetCoulombDischargeRaw() {
-    // 0xB4–0xB7: discharge coulomb counter (32-bit)
-    return axpRead32(0xB4);
-}
-
-// Net coulomb value in mAh, same formula as original AXP192::GetCoulombData.
-static float axpGetCoulombNet_mAh() {
-    uint32_t coin  = axpGetCoulombChargeRaw();
-    uint32_t coout = axpGetCoulombDischargeRaw();
-
-    uint32_t diff;
-    bool negative = false;
-
-    if (coin >= coout) {
-        diff = coin - coout;
-    } else {
-        diff     = coout - coin;
-        negative = true;
+uint32_t axpRead32bit(uint8_t Addr) {
+    uint32_t ReData = 0;
+    Wire1.beginTransmission(0x34);
+    Wire1.write(Addr);
+    Wire1.endTransmission();
+    Wire1.requestFrom(0x34, 4);
+    for (int i = 0; i < 4; i++) {
+        ReData <<= 8;
+        ReData |= Wire1.read();
     }
+    return ReData;
+}
 
-    // From original AXP192 formula:
-    //   c[mAh] = 65536 * current_LSB[mA] * (coin - coout) / 3600 / ADC_rate[Hz]
-    // For AXP192: current_LSB = 0.5mA. We assume ADC_rate = 200Hz here.
-    constexpr float currentLSB_mA = 0.5f;
-    constexpr float adcRateHz     = 200.0f;
 
-    float c_mAh = (65536.0f * currentLSB_mA * static_cast<float>(diff))
-                  / 3600.0f / adcRateHz;
+void axpEnableCoulombcounter(void) {
+    axpWrite1Byte(0xB8, 0x80);
+}
 
-    if (negative) {
-        c_mAh = -c_mAh;
-    }
-    return c_mAh;
+void axpDisableCoulombcounter(void) {
+    axpWrite1Byte(0xB8, 0x00);
+}
+
+void axpStopCoulombcounter(void) {
+    axpWrite1Byte(0xB8, 0xC0);
+}
+
+void axpClearCoulombcounter(void) {
+    axpWrite1Byte(0xB8, 0xA0);
+}
+
+uint32_t axpGetCoulombchargeData(void) {
+    return axpRead32bit(0xB0);
+}
+
+uint32_t axpGetCoulombdischargeData(void) {
+    return axpRead32bit(0xB4);
+}
+
+float axpGetCoulombData(void) {
+    uint32_t coin  = 0;
+    uint32_t coout = 0;
+
+    coin  = axpGetCoulombchargeData();
+    coout = axpGetCoulombdischargeData();
+
+    // c = 65536 * current_LSB * (coin - coout) / 3600 / ADC rate
+    // Adc rate can be read from 84H ,change this variable if you change the ADC
+    // reate
+    float ccc = 65536 * 0.5 * (int32_t)(coin - coout) / 3600.0 / 25.0;
+
+    return ccc;
 }
 // ---------------------------------------------------------------------------
 
@@ -278,7 +274,7 @@ float getBatPercentageHybrid() {
 }
 
 int getChargeCurrent() {
-  const uint8_t chargeControlNow = axpRead8(0x33);
+  const uint8_t chargeControlNow = axpRead8bit(0x33);
   for (int i = 0; i < chargeControlSteps; i++) {
     if (chargeControlNow == chargeControlArray[i]) {
       return chargeCurrentArray[i];
@@ -289,7 +285,7 @@ int getChargeCurrent() {
 
 
 void power_setup() {
-  axpEnableCoulombCounter();
+  axpEnableCoulombcounter();
   doPowerManagement();
   ravg_batVoltage.fillValue(M5.Power.Axp192.getBatteryVoltage(), runningAvgCnt);
   md_power.start(md_power_milliseconds);
@@ -357,7 +353,7 @@ void doPowerManagement() {
   pwr.tempInAXP192 = M5.Power.Axp192.getInternalTemperature();
 
   // Net battery coulomb count in mAh (positive = net charge in, negative = net discharge).
-  pwr.coulombCount = axpGetCoulombNet_mAh();
+  pwr.coulombCount = axpGetCoulombData();
   //pwr.batPercentageCoulomb = getBatPercentageCoulomb();
 
 
@@ -383,7 +379,7 @@ void doPowerManagement() {
     }*/
 
     if (pwr.maxChargeCurrent != 780) {
-      axpWrite8(0x33, 0xc8);
+      axpWrite1Byte(0x33, 0xc8);
     }
 
     
@@ -398,7 +394,7 @@ void doPowerManagement() {
       // Charge to Off
       
       if (md_chargeToOff.justFinished()) {
-        axpClearCoulombCounter();   // 0 mAh == 100%
+        axpClearCoulombcounter();   // 0 mAh == 100%
         pwr.coulombCount = 0.0f;    // keep RAM in sync
         M5.Power.powerOff();
       }
@@ -428,14 +424,14 @@ void doPowerManagement() {
     pwr.maxBrightness = 100;
     
     if (pwr.maxChargeCurrent != 100) {
-      axpWrite8(0x33, 0xc0);
+      axpWrite1Byte(0x33, 0xc0);
     }
 
   } else {                              // 3v Battery
 
     md_chargeToOff.stop();
     if (pwr.maxChargeCurrent != 100) {
-      axpWrite8(0x33, 0xc0);
+      axpWrite1Byte(0x33, 0xc0);
     }
 
     if (isBatWarningLevel) {

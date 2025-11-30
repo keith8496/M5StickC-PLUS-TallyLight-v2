@@ -137,7 +137,7 @@ void MqttClient::publishStatus(const StatusSnapshot& st)
     pub("battery_pct", String(st.batteryPct));
     pub("battery_pct_coulomb", String(st.batPercentageCoulomb));
     pub("battery_pct_hybrid", String(st.batPercentageHybrid));
-    pub("battery_capacity_mah", String(st.batterCampacityMah));
+    pub("coulomb_count", String(st.coulombCount));
 
     // Radio / environment
     pub("rssi", String(st.rssi));
