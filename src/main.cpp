@@ -43,16 +43,22 @@ MqttCommand g_pendingCommand;  // global or static
 
 // Example status snapshot builder
 StatusSnapshot buildStatusSnapshot() {
+    auto eff = g_config.effective();
+    
     StatusSnapshot st;
     st.uptimeSec = (millis() - g_bootMillis) / 1000;
+    st.batteryMv  = static_cast<uint16_t>(pwr.batVoltage * 1000.0f);
     float batPct = pwr.batPercentage;
     if (batPct < 0.0f) batPct = 0.0f;
     else if (batPct > 100.0f) batPct = 100.0f;
     st.batteryPct = static_cast<uint8_t>(batPct + 0.5f);
-    st.batteryMv  = static_cast<uint16_t>(pwr.batVoltage * 1000.0f);
+    st.batPercentageCoulomb = static_cast<uint8_t>(pwr.batPercentageCoulomb + 0.5f);
+    st.batPercentageHybrid   = static_cast<uint8_t>(pwr.batPercentageHybrid + 0.5f);
+    st.coulombCount   = pwr.coulombCount;
     st.rssi       = static_cast<int8_t>(WiFi.RSSI());
     st.temperatureC = pwr.tempInAXP192;
     st.firmwareVersion = F("2.0.0-mqtt");
+    st.buildDateTime   = eff.buildDateTime;
     st.hwRevision      = F("M5StickC-Plus");
     return st;
 }
@@ -164,6 +170,9 @@ void setup () {
         ms_tps.start(1000);
         ms_runningAvg.start(60000);
     #endif
+
+    auto eff = g_config.effective();
+    Serial.printf("BUILD_DATETIME from config: '%s'\n", eff.buildDateTime.c_str());
     
 }
 
@@ -226,6 +235,12 @@ void loop () {
             case MqttCommandType::ResyncTime:
                 Serial.println("MQTT: ResyncTime command received");
                 requestTimeResync();
+                break;
+
+            case MqttCommandType::selectNextInput:
+                Serial.println("MQTT: selectNextInput command received");
+                g_tally.selectNextInput();
+                g_mqtt.publishSelectedInput(g_tally.selectedInput);
                 break;
 
             case MqttCommandType::None:

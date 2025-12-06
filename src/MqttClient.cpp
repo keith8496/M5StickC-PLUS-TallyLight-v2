@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <PubSubClient.h>
+#include <stdarg.h>
 
 #include "MqttClient.h"
 
@@ -18,13 +19,31 @@ static const char* TOPIC_ALL_CMD            = "sanctuary/tally/all/cmd";
 static const char* AVAILABILITY_SUBTOPIC = "availability";
 static const char* STATUS_ROOT_SUBTOPIC  = "status";
 
-static const char* MQTT_USERNAME = "worship";   //temp
-static const char* MQTT_PASSWORD = "Owasso13";  //temp
-
 static const uint32_t RECONNECT_INTERVAL_MS = 5000;
 
 // We’ll use this static pointer so PubSubClient can call back into the instance
 static MqttClient* s_instance = nullptr;
+
+// Global logging helper implementation. This uses Serial for local debug and,
+// when MQTT is connected, forwards the line to the device's log topic via
+// MqttClient::publishLog().
+void logf(LogLevel level, const char* fmt, ...) {
+    char buf[192];
+
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    // Always print to Serial (if available)
+    Serial.print(buf);
+
+    // If we have an MQTT client instance and it's marked connected, try to
+    // forward the log line over MQTT as well.
+    if (s_instance && g_config.device.mqtt_isConnected) {
+        s_instance->publishLog(String(buf), level);
+    }
+}
 
 // --- Ctor -----------------------------------------------------
 
@@ -96,7 +115,8 @@ void MqttClient::publishAvailability(const String& state) {
     _mqtt->publish(topic.c_str(), state.c_str(), true); // retained
 }
 
-void MqttClient::publishStatus(const StatusSnapshot& st) {
+void MqttClient::publishStatus(const StatusSnapshot& st)
+{
     if (!_connected) return;
 
     const String root = topicDeviceRoot() + "/" + STATUS_ROOT_SUBTOPIC + "/";
@@ -106,16 +126,29 @@ void MqttClient::publishStatus(const StatusSnapshot& st) {
         _mqtt->publish(topic.c_str(), value.c_str(), false);
     };
 
+    // Core status
     pub("uptime", String(st.uptimeSec));
-    pub("battery_pct", String(st.batteryPct));
+
+    // Battery metrics
     pub("battery_mv", String(st.batteryMv));
+    pub("battery_pct", String(st.batteryPct));
+    pub("battery_pct_coulomb", String(st.batPercentageCoulomb));
+    pub("battery_pct_hybrid", String(st.batPercentageHybrid));
+    pub("coulomb_count", String(st.coulombCount));
+
+    // Radio / environment
     pub("rssi", String(st.rssi));
     if (!isnan(st.temperatureC)) {
         pub("temperature", String(st.temperatureC, 1));
     }
+
+    // Device metadata
     pub("restarts", String(st.restartCount));
     if (st.firmwareVersion.length()) {
         pub("firmware_version", st.firmwareVersion);
+    }
+    if (st.buildDateTime.length()) {
+        pub("buildDateTime", st.buildDateTime);
     }
     if (st.hwRevision.length()) {
         pub("hw_revision", st.hwRevision);
@@ -123,10 +156,28 @@ void MqttClient::publishStatus(const StatusSnapshot& st) {
 }
 
 void MqttClient::publishSelectedInput(uint8_t input) {
-    // Schedule a debounced publish of the selected input.
+    // Schedule a debounced publish of the selected input (numeric ID).
     _pendingSelectedInput            = input;
     _hasPendingSelectedInput         = true;
     _pendingSelectedInputChangedAtMs = millis();
+
+    // Also publish the ATEM short and long names for this input immediately, if known.
+    const AtemInputInfo* info = _tally.findInput(input);
+    if (_connected && _mqtt && info) {
+        const String root = topicDeviceRoot() + "/" + STATUS_ROOT_SUBTOPIC + "/";
+
+        // Publish short_name
+        if (info->shortName.length() > 0) {
+            String topicShort = root + "short_name";
+            _mqtt->publish(topicShort.c_str(), info->shortName.c_str(), false);
+        }
+
+        // Publish long_name
+        if (info->longName.length() > 0) {
+            String topicLong = root + "long_name";
+            _mqtt->publish(topicLong.c_str(), info->longName.c_str(), false);
+        }
+    }
 }
 
 void MqttClient::publishTallyColor(const String& color) {
@@ -139,7 +190,7 @@ void MqttClient::publishLog(const String& line, LogLevel level) {
     if (!_connected) return;
 
     // Respect global log level
-    if (static_cast<uint8_t>(level) > static_cast<uint8_t>(_cfg.global.logLevel)) {
+    if (static_cast<uint8_t>(level) > static_cast<uint8_t>(_cfg.device.logLevel)) {
         return;
     }
 

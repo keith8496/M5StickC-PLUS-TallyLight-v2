@@ -86,17 +86,69 @@ void refreshTallyScreen() {
     tallyScreen.setCursor(timeX, row0Y);
     tallyScreen.print(timeStr);
 
-    // WiFi icon (second segment center on the top row), aligned near the clock/SoC baseline
-    int wifiX = wifiCenterX - 3;   // icon is ~7px wide
-    int wifiY = row0Y + 0;         // positioned close to the Clock/SoC baseline
+    // WiFi icon (second segment center on the top row), now using 1–4 bars based on RSSI
+    int wifiX = wifiCenterX - 5;   // left edge of bars group
+    int wifiY = row0Y + 2;         // baseline for the bars
     bool wifiConnected = (WiFi.status() == WL_CONNECTED);
+    int32_t rssi = WiFi.RSSI();
+
+    // Map RSSI to number of bars (0–4)
+    // Excellent:   > -60 dBm  -> 4 bars
+    // Good:       -65 to -60  -> 3 bars
+    // Acceptable: -70 to -65  -> 2 bars
+    // Weak:       <= -70      -> 1 bar (if connected)
+    uint8_t wifiBars = 0;
+    if (wifiConnected) {
+        if (rssi > -60) {
+            wifiBars = 4;
+        } else if (rssi > -65) {
+            wifiBars = 3;
+        } else if (rssi > -70) {
+            wifiBars = 2;
+        } else {
+            wifiBars = 1;
+        }
+    }
+
     uint16_t wifiColor = wifiConnected ? TFT_WHITE : TFT_DARKGREY;
 
-    // Slightly larger WiFi "fan" icon
-    tallyScreen.drawLine(wifiX + 2, wifiY + 9, wifiX + 3, wifiY + 9, wifiColor);
-    tallyScreen.drawLine(wifiX + 1, wifiY + 8, wifiX + 4, wifiY + 8, wifiColor);
-    tallyScreen.drawLine(wifiX,     wifiY + 7, wifiX + 5, wifiY + 7, wifiColor);
-    tallyScreen.drawLine(wifiX - 1, wifiY + 6, wifiX + 6, wifiY + 6, wifiColor);
+    // Draw up to 4 vertical bars, left to right, increasing height
+    const int barWidth   = 2;
+    const int barSpacing = 1;
+    const int barBaseY   = wifiY + 10;  // bottom of the tallest bar
+
+    for (int i = 0; i < 4; ++i) {
+        int barHeight;
+        switch (i) {
+            case 0: barHeight = 3;  break;  // weakest
+            case 1: barHeight = 6;  break;
+            case 2: barHeight = 8;  break;
+            case 3: barHeight = 10; break;  // strongest
+            default: barHeight = 0; break;
+        }
+
+        int barX = wifiX + i * (barWidth + barSpacing);
+        int barY = barBaseY - barHeight;
+
+        if (wifiBars > i) {
+            // Filled bar for active signal level
+            tallyScreen.fillRect(barX, barY, barWidth, barHeight, wifiColor);
+        } else {
+            // Outline only for inactive bars (optional)
+            tallyScreen.drawRect(barX, barY, barWidth, barHeight, wifiColor);
+        }
+    }
+
+    // If disconnected, draw an "X" over the bar group to make it obvious
+    if (!wifiConnected) {
+        int groupLeft   = wifiX;
+        int groupRight  = wifiX + 3 * (barWidth + barSpacing) + barWidth; // right edge of last bar
+        int groupTop    = barBaseY - 10;  // top of tallest bar
+        int groupBottom = barBaseY;       // bottom of bars
+
+        tallyScreen.drawLine(groupLeft,  groupTop,    groupRight, groupBottom, wifiColor);
+        tallyScreen.drawLine(groupLeft,  groupBottom, groupRight, groupTop,    wifiColor);
+    }
 
     // MQTT icon (third segment center on the top row), aligned near the clock/SoC baseline
     int mqttX = mqttCenterX - 7;   // box is 14px wide
@@ -227,19 +279,19 @@ void refreshTallyScreen() {
         }
     }
 
-    // Determine labels for current PREV and PROG buses by scanning known input IDs
+    // Determine labels for current PREV and PROG buses by scanning known inputs
     String prevLabel;
     String progLabel;
-    for (uint8_t id = 1; id <= 32; ++id) {
-        const AtemInputInfo* info = g_tally.findInput(id);
-        if (!info) continue;
+    for (const auto& kv : g_tally.inputs) {
+        uint8_t id = kv.first;
+        const AtemInputInfo& info = kv.second;
 
         // Build a display label for this input
         String label;
-        if (info->shortName.length()) {
-            label = info->shortName;
-        } else if (info->longName.length()) {
-            label = info->longName;
+        if (info.shortName.length()) {
+            label = info.shortName;
+        } else if (info.longName.length()) {
+            label = info.longName;
         } else {
             label = String(id);
         }
@@ -359,12 +411,12 @@ void refreshPowerScreen() {
     powerScreen.fillSprite(TFT_BLACK);
     powerScreen.setTextColor(TFT_WHITE);
     powerScreen.setCursor(0,0);
-    powerScreen.setTextSize(2);
+    powerScreen.setTextSize(1);
     powerScreen.println(F("Power Management"));
 
     powerScreen.setTextSize(1);
     powerScreen.println(pwr.powerMode);
-    powerScreen.printf("Bat: %s\r\n  V: %.3fv     %.1f%%\r\n", pwr.batWarningLevel, pwr.batVoltage, pwr.batPercentage);
+    powerScreen.printf("Bat: %s\r\n  V: %.3fv    %.1f%%/%.1f%%/ %.1f%%\r\n  Cap: %umAh -> %umAh\r\n", pwr.batWarningLevel, pwr.batVoltage, pwr.batPercentage, pwr.batPercentageCoulomb, pwr.batPercentageHybrid, pwr.learnedCapOld, pwr.learnedCapNew);
     powerScreen.printf("  I: %.3fma  Ic: %.3fma\r\n", pwr.batCurrent, pwr.batChargeCurrent);
     powerScreen.printf("  Imax: %ima  Bmm: (%.f%%/%.f%%) SB: %i\r\n", pwr.maxChargeCurrent, pwr.batPercentageMin, pwr.batPercentageMax, currentBrightness);
     powerScreen.printf("USB:\r\n  V: %.3fv  I: %.3fma\r\n", pwr.vbusVoltage, pwr.vbusCurrent);
@@ -385,13 +437,13 @@ void refreshSetupScreen() {
     strTimeStatus.reserve(16);
     switch (timeStatus()) {
         case (timeNotSet):
-            strTimeStatus= "timeNotSet";
+            strTimeStatus= "Not Set";
             break;
         case (timeNeedsSync):
-            strTimeStatus = "timeNeedsSync";
+            strTimeStatus = "Needs Sync";
             break;
         case (timeSet):
-            strTimeStatus = "timeSet";
+            strTimeStatus = "Set";
             break;
         default:
             break;
@@ -404,6 +456,7 @@ void refreshSetupScreen() {
     setupScreen.println(F("Setup Screen"));
     setupScreen.println();
     setupScreen.setTextSize(1);
+    setupScreen.println("Build: " + String(eff.buildDateTime));
     setupScreen.println("SSID: " + String(wm.getWiFiSSID()) + " " + String(WiFi.RSSI()));
     setupScreen.println("Webportal Active: " + String(wm.getWebPortalActive()));
     setupScreen.println("Hostname: " + wm.getWiFiHostname());

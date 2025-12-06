@@ -47,6 +47,7 @@ static MqttCommandType parseCommand(const String& payload) {
     if (v == "ota_update")   return MqttCommandType::OtaUpdate;
     if (v == "factory_reset")return MqttCommandType::FactoryReset;
     if (v == "resync_time")   return MqttCommandType::ResyncTime;
+    if (v == "select_next_input")   return MqttCommandType::selectNextInput;
     return MqttCommandType::None;
 }
 
@@ -173,10 +174,6 @@ static void handleGlobalConfig(ConfigState& cfg, const String& key, const String
         cfg.global.statusIntervalSec = v;
     }
 
-    // Logging
-    else if (key == "log_level") {
-        cfg.global.logLevel = parseLogLevel(payload);
-    }
 
     // OTA (future) – we just store them, even though we don't act on them yet
     else if (key == "firmware_url") {
@@ -203,6 +200,8 @@ static void handleDeviceConfig(ConfigState& cfg, const String& key, const String
         if (v > 0 && v < 100000) {
             cfg.device.batteryCapacityMah = static_cast<uint16_t>(v);
         }
+    } else if (key == "log_level") {
+        cfg.device.logLevel = parseLogLevel(payload);
     }
 }
 
