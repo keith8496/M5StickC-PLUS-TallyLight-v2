@@ -10,7 +10,7 @@ static constexpr uint32_t kBuildUnixTime = 0;
 
 
 // How often we publish status by default (seconds)
-constexpr uint16_t DEFAULT_STATUS_INTERVAL_SEC = 30;
+constexpr uint16_t DEFAULT_STATUS_INTERVAL_SEC = 60;
 
 // --- Enums ---------------------------------------------------
 

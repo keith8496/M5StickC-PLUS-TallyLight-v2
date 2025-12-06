@@ -6,6 +6,8 @@
 #include "ScreenModule.h"
 #include "MqttClient.h"
 
+#include <esp_wifi.h>
+
 
 extern ConfigState g_config;
 extern MqttClient g_mqtt;
@@ -41,6 +43,61 @@ void WiFi_setup () {
     WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
     WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
     WiFi.setAutoReconnect(true);
+
+    // Apply configured Wi-Fi transmit power and sleep mode for power savings.
+    // Map configured dBm to nearest supported esp_wifi power enum.
+    int8_t txDbm = eff.wifiTxPowerDbm; // from EffectiveConfig
+    if (txDbm < 2)  txDbm = 2;
+    if (txDbm > 20) txDbm = 20;
+
+    // Use only valid wifi_power_t enums from the ESP32 Arduino core.
+    // Available values include: WIFI_POWER_19_5dBm, WIFI_POWER_17dBm, WIFI_POWER_15dBm,
+    // WIFI_POWER_13dBm, WIFI_POWER_11dBm, WIFI_POWER_8_5dBm, WIFI_POWER_7dBm,
+    // WIFI_POWER_5dBm, WIFI_POWER_2dBm.
+    wifi_power_t txPowerEnum = WIFI_POWER_8_5dBm; // safe default around 8 dBm
+
+    if      (txDbm <= 2)  txPowerEnum = WIFI_POWER_2dBm;
+    else if (txDbm <= 5)  txPowerEnum = WIFI_POWER_5dBm;
+    else if (txDbm <= 7)  txPowerEnum = WIFI_POWER_7dBm;
+    else if (txDbm <= 9)  txPowerEnum = WIFI_POWER_8_5dBm;
+    else if (txDbm <= 11) txPowerEnum = WIFI_POWER_11dBm;
+    else if (txDbm <= 13) txPowerEnum = WIFI_POWER_13dBm;
+    else if (txDbm <= 15) txPowerEnum = WIFI_POWER_15dBm;
+    else if (txDbm <= 17) txPowerEnum = WIFI_POWER_17dBm;
+    else                  txPowerEnum = WIFI_POWER_19_5dBm;
+
+    WiFi.setTxPower(txPowerEnum);
+
+      // Debug: confirm applied TX power
+      int8_t rawPower = 0;
+      esp_wifi_get_max_tx_power(&rawPower);
+      Serial.printf("[WiFi] TX Power applied (raw units*0.25 dBm): %d -> %.2f dBm\n",
+                    rawPower, rawPower * 0.25f);
+
+    // Apply configured Wi-Fi sleep / power-save mode.
+    switch (eff.wifiSleep) {
+        case WifiSleepMode::None:
+            WiFi.setSleep(false);
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            break;
+        case WifiSleepMode::Modem:
+            WiFi.setSleep(true);
+            esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+            break;
+        case WifiSleepMode::Light:
+            WiFi.setSleep(true);
+            esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+            break;
+        default:
+            // Fallback to modem sleep if config is invalid
+            WiFi.setSleep(true);
+            esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+            break;
+    }
+      // Debug: confirm applied Wi-Fi power save mode
+      wifi_ps_type_t psMode;
+      esp_wifi_get_ps(&psMode);
+      Serial.printf("[WiFi] Power Save Mode applied: %d (0=NONE, 1=MIN_MODEM, 2=MAX_MODEM)\n", psMode);
     
     std::vector<const char *> menu = {"wifi","info","param","sep","restart","exit"};
     wm.setMenu(menu);
