@@ -62,10 +62,14 @@ Example JSON:
 
 ```json
 {
-  "1": { "id": 1, "label": "CTR", "type": "camera", "tallyEnabled": true },
-  "2": { "id": 2, "label": "LFT", "type": "camera", "tallyEnabled": true }
+  "1": { "id": 1, "short_name": "CTR", "long_name": "Center Cam", "tally_enabled": "TRUE" },
+  "2": { "id": 2, "short_name": "LFT", "long_name": "Left Cam",   "tally_enabled": "TRUE" }
 }
 ```
+
+- `short_name`: 3–4 character label used on the tally UI (e.g. `CTR`, `NWC`).
+- `long_name`: human-readable label (e.g. `Center Cam`, `North West Corner`).
+- `tally_enabled`: `"TRUE"` or `"FALSE"` (case-insensitive). Only inputs with `tally_enabled == "TRUE"` are eligible when cycling inputs on the device.
 
 ---
 
@@ -78,11 +82,15 @@ All global config topics are **retained**.
 ## 3.1 Network / Infrastructure
 
 | Topic | Payload Example | Notes |
-|--------|-------------------------|-------|
-| `sanctuary/tally/config/ntp_server` | `"pool.ntp.org"` | NTP server hostname/IP |
-| `sanctuary/tally/config/timezone` | `"America/Chicago"` or `"GMT-6"` | Device timezone |
+|--------|-----------------|-------|
+| `sanctuary/tally/config/mqtt_server`   | `"172.16.30.11"` | MQTT broker hostname/IP (overrides WiFiManager default) |
+| `sanctuary/tally/config/mqtt_port`     | `"1883"`         | MQTT broker port |
+| `sanctuary/tally/config/mqtt_username` | `"tally"`        | MQTT username (optional) |
+| `sanctuary/tally/config/mqtt_password` | `"secret"`       | MQTT password (optional) |
+| `sanctuary/tally/config/ntp_server`    | `"us.pool.ntp.org"` | NTP server hostname/IP |
+| `sanctuary/tally/config/timezone`      | `"America/Chicago"` or `"Etc/UTC"` | Device timezone (IANA string or fixed offset) |
 
-WiFi and MQTT settings will be configured in WifiManager.
+WiFi SSID/password are configured via WiFiManager, not MQTT. The MQTT `*_server` and `*_port` topics can optionally override the WiFiManager defaults at runtime.
 
 ---
 
@@ -129,9 +137,10 @@ These apply only to the designated tally device.
 
 | Topic | Payload Example | Purpose |
 |--------|-------------------------|---------|
-| `sanctuary/tally/{device}/config/name` | `"Cam1"` | Friendly device name |
-| `sanctuary/tally/{device}/config/input` | `"1"` | ATEM input this tally listens to |
-| `sanctuary/tally/{device}/config/battery_capacity` | `"2200"` | Battery capacity (mAh) for SoC |
+| `sanctuary/tally/{device}/config/name`              | `"Cam1"`     | Friendly device name (shown on screen) |
+| `sanctuary/tally/{device}/config/input`             | `"1"`        | ATEM input this tally listens to (0–255) |
+| `sanctuary/tally/{device}/config/battery_capacity`  | `"2200"`     | Battery capacity (mAh) used by SoC model |
+| `sanctuary/tally/{device}/config/log_level`         | `"debug"`    | Per-device log level: `"none"`, `"error"`, `"warn"`, `"info"`, `"debug"` |
 
 ---
 
@@ -141,10 +150,12 @@ These apply only to the designated tally device.
 
 | Topic | Payload | Purpose |
 |--------|---------|---------|
-| `sanctuary/tally/all/cmd` | `"deep_sleep"` | Put all devices into deep sleep |
-|  | `"wakeup"` | Wake all devices |
-|  | `"reboot"` | Reboot all devices |
-|  | `"ota_update"` | Reserved for future OTA |
+| `sanctuary/tally/all/cmd` | `"deep_sleep"`    | Put all devices into deep sleep |
+|                           | `"wakeup"`        | Wake all devices (if supported) |
+|                           | `"reboot"`        | Reboot all devices |
+|                           | `"ota_update"`    | Reserved for future OTA rollout |
+|                           | `"factory_reset"` | Factory reset all devices (clear config/prefs, implementation-defined) |
+|                           | `"resync_time"`   | Force all devices to re-run NTP/timezone sync |
 
 Not retained.
 
@@ -154,10 +165,12 @@ Not retained.
 
 | Topic | Payload | Purpose |
 |--------|---------|---------|
-| `sanctuary/tally/{device}/cmd` | `"deep_sleep"` | Deep sleep this device |
-|  | `"wakeup"` | Wake this device |
-|  | `"reboot"` | Reboot this device |
-|  | `"ota_update"` | Reserved for future OTA |
+| `sanctuary/tally/{device}/cmd` | `"deep_sleep"`    | Deep sleep this device |
+|                                | `"wakeup"`        | Wake this device (if supported) |
+|                                | `"reboot"`        | Reboot this device |
+|                                | `"ota_update"`    | Reserved for future OTA |
+|                                | `"factory_reset"` | Factory reset this device (clear config/prefs, implementation-defined) |
+|                                | `"resync_time"`   | Force this device to re-run NTP/timezone sync |
 
 Not retained.
 
@@ -203,13 +216,15 @@ Devices publish status periodically (default: every 30s, overridable via `status
 
 | Topic | Payload Options |
 |--------|-----------------|
-| `sanctuary/tally/config/log_level` | `"none"`, `"error"`, `"warn"`, `"info"`, `"debug"` |
+| `sanctuary/tally/{device}/config/log_level` | `"none"`, `"error"`, `"warn"`, `"info"`, `"debug"` |
 
 ## 7.2 Log Stream
 
 | Topic | Payload Example |
 |--------|-----------------|
 | `sanctuary/tally/{device}/status/log` | `"WiFi connected: -58 dBm"` |
+
+Log messages published to `.../status/log` are filtered on-device according to `sanctuary/tally/{device}/config/log_level`. For example, if `log_level == "info"`, `"debug"` logs are suppressed.
 
 ---
 
@@ -224,8 +239,6 @@ sanctuary/
 
   tally/
     config/
-      wifi_ssid
-      wifi_password
       mqtt_server
       mqtt_port
       mqtt_username
@@ -251,6 +264,7 @@ sanctuary/
         name
         input
         battery_capacity
+        log_level
       cmd
       availability
       status/

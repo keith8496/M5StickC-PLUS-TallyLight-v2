@@ -14,6 +14,8 @@ struct power {
     float batPercentage = 0;
     float batPercentageMin = 0;
     float batPercentageMax = 0;
+    float batPercentageCoulomb;   // experimental CC-based SoC
+    float batPercentageHybrid;    // optional, future hybrid
     float batCurrent = 0;
     float batChargeCurrent = 0;
     float vbusVoltage = 0;
@@ -23,7 +25,11 @@ struct power {
     float apsVoltage = 0;
     float tempInAXP192 = 0;
     int maxChargeCurrent = 0;
-    int maxBrightness = 100;
+    int maxBrightness = 100;    
+    
+    // Capacity-learning debug (last observed cycle)
+    uint16_t learnedCapOld = 0;
+    uint16_t learnedCapNew = 0;
 };
 
 extern power pwr;

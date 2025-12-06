@@ -1,6 +1,14 @@
 #pragma once
 #include <M5Unified.h>
 
+
+#ifdef BUILD_DATETIME
+static constexpr uint32_t kBuildUnixTime = static_cast<uint32_t>(BUILD_DATETIME);
+#else
+static constexpr uint32_t kBuildUnixTime = 0;
+#endif
+
+
 // How often we publish status by default (seconds)
 constexpr uint16_t DEFAULT_STATUS_INTERVAL_SEC = 30;
 
@@ -78,9 +86,6 @@ struct GlobalConfig {
     int8_t wifiTxPowerDbm = ConfigDefaults::WIFI_TX_POWER_DBM;       
     WifiSleepMode wifiSleep = ConfigDefaults::WIFI_SLEEP;
     uint16_t statusIntervalSec = ConfigDefaults::STATUS_INTERVAL_SEC;
-
-    // Logging
-    LogLevel logLevel = ConfigDefaults::LOG_LEVEL;
 };
 
 // --- Per-device config ---------------------------------------
@@ -89,6 +94,12 @@ struct DeviceConfig {
     // Fixed identity for this build
     String deviceId;
     String deviceName;
+    
+    // Raw Unix time from PlatformIO (-DBUILD_DATETIME=$UNIX_TIME)
+    uint32_t buildUnixTime = kBuildUnixTime;
+
+    // Printable version (decimal string)
+    String   buildDateTime = String(buildUnixTime);
 
     // Mutable from MQTT
     String friendlyName = ConfigDefaults::FRIENDLY_NAME;
@@ -99,6 +110,9 @@ struct DeviceConfig {
 
     // Battery / SoC model
     uint16_t batteryCapacityMah = ConfigDefaults::BATTERY_CAPACITY_MAH; // SoC algorithm input
+
+    // Logging
+    LogLevel logLevel = ConfigDefaults::LOG_LEVEL;
 };
 
 // --- Effective config (merged view) --------------------------
@@ -108,6 +122,7 @@ struct EffectiveConfig {
     String deviceId;
     String deviceName;
     String friendlyName;
+    String buildDateTime;
 
     // Network
     String mqttServer;
@@ -152,6 +167,7 @@ struct ConfigState {
         e.deviceId = device.deviceId;
         e.deviceName = device.deviceName;
         e.friendlyName = device.friendlyName;
+        e.buildDateTime = device.buildDateTime;
 
         // Network: apply global config with sane defaults
         e.mqttServer   = global.mqttServer;
@@ -161,7 +177,7 @@ struct ConfigState {
 
         e.ntpServer = global.ntpServer;
         e.timeZone  = global.timeZone;
-
+        
         e.brightness             = global.brightness;
         e.powersaverBrightness   = global.powersaverBrightness;
         e.powersaverBatteryPct   = global.powersaverBatteryPct;
@@ -178,7 +194,7 @@ struct ConfigState {
         e.ntp_isSynchronized = device.ntp_isSynchronized;
         e.batteryCapacityMah = device.batteryCapacityMah;
 
-        e.logLevel = global.logLevel;
+        e.logLevel = device.logLevel;
 
         return e;
     }
