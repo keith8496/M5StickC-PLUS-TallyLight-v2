@@ -437,13 +437,13 @@ void refreshSetupScreen() {
     strTimeStatus.reserve(16);
     switch (timeStatus()) {
         case (timeNotSet):
-            strTimeStatus= "timeNotSet";
+            strTimeStatus= "Not Set";
             break;
         case (timeNeedsSync):
-            strTimeStatus = "timeNeedsSync";
+            strTimeStatus = "Needs Sync";
             break;
         case (timeSet):
-            strTimeStatus = "timeSet";
+            strTimeStatus = "Set";
             break;
         default:
             break;
@@ -456,6 +456,7 @@ void refreshSetupScreen() {
     setupScreen.println(F("Setup Screen"));
     setupScreen.println();
     setupScreen.setTextSize(1);
+    setupScreen.println("Build: " + String(eff.buildDateTime));
     setupScreen.println("SSID: " + String(wm.getWiFiSSID()) + " " + String(WiFi.RSSI()));
     setupScreen.println("Webportal Active: " + String(wm.getWebPortalActive()));
     setupScreen.println("Hostname: " + wm.getWiFiHostname());

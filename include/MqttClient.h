@@ -19,6 +19,7 @@ struct StatusSnapshot {
     float    temperatureC = NAN;
     uint32_t restartCount = 0;
     String   firmwareVersion;
+    String   buildDateTime;   // from eff.buildDateTime (YYYYMMDDHHMMSS)
     String   hwRevision;
 };
 
