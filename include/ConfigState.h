@@ -58,6 +58,9 @@ namespace ConfigDefaults {
     // Status interval (seconds)
     constexpr uint16_t STATUS_INTERVAL_SEC = DEFAULT_STATUS_INTERVAL_SEC;
 
+    // Idle dimming (seconds of no activity before dim)
+    constexpr uint16_t IDLE_DIM_SECONDS = 60;
+
     // Logging
     constexpr LogLevel LOG_LEVEL = LogLevel::Info;
 }
@@ -86,6 +89,9 @@ struct GlobalConfig {
     int8_t wifiTxPowerDbm = ConfigDefaults::WIFI_TX_POWER_DBM;       
     WifiSleepMode wifiSleep = ConfigDefaults::WIFI_SLEEP;
     uint16_t statusIntervalSec = ConfigDefaults::STATUS_INTERVAL_SEC;
+
+    // Idle dimming
+    uint16_t idleDimSeconds = ConfigDefaults::IDLE_DIM_SECONDS;
 };
 
 // --- Per-device config ---------------------------------------
@@ -110,6 +116,11 @@ struct DeviceConfig {
 
     // Battery / SoC model
     uint16_t batteryCapacityMah = ConfigDefaults::BATTERY_CAPACITY_MAH; // SoC algorithm input
+
+    // Per-device idle dimming override:
+    //  - 0xFFFF  => no override, use global idleDimSeconds
+    //  - 0..65534 => override value in seconds (0 means "disable idle dimming" for this device)
+    uint16_t idleDimSecondsOverride = 0xFFFF;
 
     // Logging
     LogLevel logLevel = ConfigDefaults::LOG_LEVEL;
@@ -143,6 +154,9 @@ struct EffectiveConfig {
     int8_t wifiTxPowerDbm;
     WifiSleepMode wifiSleep;
     uint16_t statusIntervalSec;
+
+    // Idle dimming
+    uint16_t idleDimSeconds;
 
     // Per-device
     uint8_t atemInput;
@@ -184,9 +198,16 @@ struct ConfigState {
         e.tallyColorProgram      = global.tallyColorProgram;
         e.tallyColorPreview      = global.tallyColorPreview;
 
-        e.wifiTxPowerDbm   = global.wifiTxPowerDbm;
-        e.wifiSleep        = global.wifiSleep;
+        e.wifiTxPowerDbm    = global.wifiTxPowerDbm;
+        e.wifiSleep         = global.wifiSleep;
         e.statusIntervalSec = global.statusIntervalSec;
+
+        // Per-device idle dim override: 0xFFFF means "no override, use global".
+        if (device.idleDimSecondsOverride == 0xFFFF) {
+            e.idleDimSeconds = global.idleDimSeconds;
+        } else {
+            e.idleDimSeconds = device.idleDimSecondsOverride;
+        }
 
         e.atemInput          = device.atemInput;
         //e.wifi_isConnected   = device.wifi_isConnected;
