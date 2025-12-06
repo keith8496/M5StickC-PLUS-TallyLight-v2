@@ -456,15 +456,15 @@ void doPowerManagement() {
         md_chargeToOff.start(md_chargeToOff_milliseconds);
       }
       
+      // PowerModule.cpp
       if (md_chargeToOff.isRunning()) {
-        constexpr size_t POWER_MODE_MAX_LEN   = 20;
-        char powerMode[POWER_MODE_MAX_LEN];
-        const int md_chargeToOffRemaining = floor(md_chargeToOff.remaining() / 1000);
-        snprintf(powerMode, 20, "Charge to Off (%i)", md_chargeToOffRemaining);
-        snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", powerMode);
+          char powerMode[POWER_MODE_MAX_LEN + 1];
+          const int md_chargeToOffRemaining = floor(md_chargeToOff.remaining() / 1000);
+          snprintf(powerMode, sizeof(powerMode), "Charge to Off (%i)", md_chargeToOffRemaining);
+          snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", powerMode);
       } else {
-        const char* mode = "Charge to Off";
-        snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
+          const char* mode = "Charge to Off";
+          snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       }
 
     }
