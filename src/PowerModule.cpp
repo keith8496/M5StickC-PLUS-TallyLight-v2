@@ -20,10 +20,10 @@ extern ConfigState g_config;
 
 power pwr;
 
-static const int md_power_milliseconds = 250;
+static const int md_power_milliseconds = 500;
 static millisDelay md_power;
 //static millisDelay md_chargeControlWait;
-static const int runningAvgCnt = 16;
+static const int runningAvgCnt = 8;
 static RunningAverage ravg_batVoltage(runningAvgCnt);
 
 // --- AXP192 helpers on top of M5Unified --------------------------------------

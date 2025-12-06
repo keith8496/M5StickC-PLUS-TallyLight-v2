@@ -77,16 +77,14 @@ void onMqttMessage(const String& topic, const String& payload) {
 }
 
 
-
-
 // --------------------------------------------------------------
 // Accelerometer-driven screen orientation (landscape only)
 // --------------------------------------------------------------
 void updateScreenOrientationFromImu()
 {
-    // Check at most every 100 ms to avoid jitter and wasted work
+    // Check at most every 250 ms to avoid jitter and wasted work (saves IMU + CPU power)
     static uint32_t lastCheckMs = 0;
-    const uint32_t intervalMs   = 100;
+    const uint32_t intervalMs   = 250;
     uint32_t now = millis();
     if (now - lastCheckMs < intervalMs) {
         return;
@@ -157,11 +155,10 @@ void setup () {
     // Default config is usually fine for StickC-Plus; tweak here if needed later.
     M5.begin(cfg);
 
-    updateScreenOrientationFromImu() ;  // initial orientation
-
     // Use M5Unified display API (start in normal landscape)
     g_displayRotation = 1;
     M5.Display.setRotation(g_displayRotation);
+    updateScreenOrientationFromImu() ;  // initial orientation
 
     setCpuFrequencyMhz(80); //Save battery by turning down the CPU clock
     btStop();               //Save battery by turning off Bluetooth

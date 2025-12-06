@@ -534,7 +534,7 @@ void changeScreen(int newScreen) {
             break; 
     }
 
-    md_screenRefresh.start(1000 / 30); // 30 fps
+    md_screenRefresh.start(1000 / 12); // ~12 fps to save power
 
 }
 
@@ -556,7 +556,7 @@ void toggleMainTab() {
 
 void refreshScreen() {
 
-    // Limit to 30 FPS
+    // Limit refresh rate (set in changeScreen, currently ~12 FPS)
     if(!md_screenRefresh.justFinished()) return;
     md_screenRefresh.repeat();
     
