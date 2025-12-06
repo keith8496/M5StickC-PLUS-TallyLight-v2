@@ -580,7 +580,7 @@ void refreshScreen() {
 }
 
 
-static const int minBrightness = 20;
+static const int minBrightness = 30;
 void setBrightness(int newBrightness) {
     if (newBrightness < minBrightness) {
         newBrightness = minBrightness;
