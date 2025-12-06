@@ -315,4 +315,8 @@ void MqttClient::handleIncoming(const char* topic, const uint8_t* payload, unsig
     if (_onMessage) {
         _onMessage(t, p);
     }
+
+    // Any MQTT subscription message counts as activity (wake from idle-dim)
+    extern void markUserActivity();   // declare the global helper from main.cpp
+    markUserActivity();
 }

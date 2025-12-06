@@ -46,6 +46,15 @@ MqttCommand g_pendingCommand;  // global or static
 // Track current display rotation for IMU-based orientation (landscape only)
 static int g_displayRotation = 1;
 
+// Idle dimming state
+static uint32_t g_lastActivityMs  = 0;
+static bool     g_isIdleDimmed    = false;
+
+// Forward declarations
+static void markUserActivity(const EffectiveConfig& eff);
+void markUserActivity();   // non-static so other files can call it
+
+
 // Example status snapshot builder
 StatusSnapshot buildStatusSnapshot() {
     auto eff = g_config.effective();
@@ -66,6 +75,27 @@ StatusSnapshot buildStatusSnapshot() {
     st.buildDateTime   = eff.buildDateTime;
     st.hwRevision      = F("M5StickC-Plus");
     return st;
+}
+
+// Mark user/activity events (buttons, screen rotation, etc.)
+static void markUserActivity(const EffectiveConfig& eff)
+{
+    g_lastActivityMs = millis();
+    if (g_isIdleDimmed) {
+        // Restore to configured active brightness
+        uint8_t target = eff.brightness;
+        if (target != currentBrightness) {
+            currentBrightness = target;
+            setBrightness(currentBrightness);
+        }
+        g_isIdleDimmed = false;
+    }
+}
+
+void markUserActivity()
+{
+    auto eff = g_config.effective();
+    markUserActivity(eff);
 }
 
 void onMqttMessage(const String& topic, const String& payload) {
@@ -94,6 +124,41 @@ void updateScreenOrientationFromImu()
     float ax, ay, az;
     // M5Unified fills ax/ay/az with acceleration in g's
     M5.Imu.getAccel(&ax, &ay, &az);
+
+    // Detect movement (not just flips) to drive idle-activity.
+    // We compare current accel to the previous sample and treat larger deltas
+    // as "movement", ignoring small noise.
+    {
+        static bool  haveLastAccel = false;
+        static float lastAx = 0.0f;
+        static float lastAy = 0.0f;
+        static float lastAz = 0.0f;
+
+        // Tunable motion sensitivity (in g). Typical noise is ~0.02–0.05g, so 0.15g is a
+        // reasonable "user moved the device" threshold.
+        const float motionThreshold = 0.15f;
+
+        if (haveLastAccel) {
+            float dax = ax - lastAx;
+            float day = ay - lastAy;
+            float daz = az - lastAz;
+
+            float sumAbs =
+                (dax >= 0.0f ? dax : -dax) +
+                (day >= 0.0f ? day : -day) +
+                (daz >= 0.0f ? daz : -daz);
+
+            if (sumAbs > motionThreshold) {
+                // Any significant movement counts as activity
+                markUserActivity();
+            }
+        }
+
+        lastAx = ax;
+        lastAy = ay;
+        lastAz = az;
+        haveLastAccel = true;
+    }
 
     // Decide which axis to use for landscape orientation based on which has greater magnitude.
     // On some board orientations X may dominate, on others Y will; this makes us robust.
@@ -166,6 +231,9 @@ void setup () {
     currentBrightness = 50;
     setBrightness(currentBrightness);
     g_buttons.begin(500);  // 500 ms long-press threshold
+
+    g_lastActivityMs = millis();
+    g_isIdleDimmed   = false;
 
     // Set deviceId and friendly deviceName
     uint8_t macAddress[6];
@@ -329,6 +397,8 @@ void loop () {
     ButtonEvent ev = g_buttons.poll();
     if (ev.type != ButtonType::None) {
         g_buttonRouter.handle(ev);
+        // Any button activity resets the idle timer and can restore brightness
+        markUserActivity(eff);
     }
 
     // Update orientation (landscape only) from the accelerometer
@@ -336,6 +406,44 @@ void loop () {
 
     // Draw whichever screen is active (startup, tally, power, setup)
     refreshScreen();
+
+    // Idle dimming: after a period of no activity, dim to powersaverBrightness
+    {
+        uint32_t nowIdle = millis();   // fresh timestamp (fixes flicker)
+        if (!g_isIdleDimmed && eff.idleDimSeconds > 0) {
+            uint32_t idleMs = (uint32_t)eff.idleDimSeconds * 1000UL;
+
+            // Determine whether this tally is currently "active" (green/red) for its selected input.
+            bool tallyActive = false;
+            if (g_tally.selectedInput != 0) {
+                // Use TallyState helpers instead of raw field comparisons.
+                bool isProg = g_tally.isProgram(g_tally.selectedInput);
+                bool isPrev = g_tally.isPreview(g_tally.selectedInput);
+                const AtemInputInfo* info = g_tally.currentSelected();
+
+                // Treat missing info as enabled (fail-safe to keep the light bright).
+                bool enabled = (info == nullptr) || info->tallyEnabled;
+
+                if (enabled && (isProg || isPrev)) {
+                    tallyActive = true;
+                }
+            }
+
+            if (tallyActive) {
+                // Do NOT dim when tally is active (green/red); instead, treat it as activity.
+                markUserActivity(eff);
+            } else if (nowIdle - g_lastActivityMs > idleMs) {
+                uint8_t dimTarget = eff.powersaverBrightness;
+
+                // Only dim down; never brighten here
+                if (dimTarget < currentBrightness) {
+                    currentBrightness = dimTarget;
+                    setBrightness(currentBrightness);
+                }
+                g_isIdleDimmed = true;
+            }
+        }
+    }
 
     #if TPS
         if (ms_tps.justFinished()) {
