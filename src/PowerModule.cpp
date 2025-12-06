@@ -303,7 +303,7 @@ float getBatPercentageVoltage(float voltage) {
     {3.40f,  15.0f},
     {3.34f,  10.0f},
     {3.28f,   5.0f},
-    {3.20f,   0.0f}
+    {3.00f,   0.0f}
   };
 
   if (voltage >= batLookup_v4[0][0]) {
