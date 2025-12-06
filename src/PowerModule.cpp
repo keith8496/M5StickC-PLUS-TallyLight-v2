@@ -97,10 +97,6 @@ float axpGetCoulombData(void) {
 }
 // ---------------------------------------------------------------------------
 
-static const int chargeControlSteps = 9;
-static const uint8_t chargeControlArray[chargeControlSteps] = {0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8};
-static const int chargeCurrentArray[chargeControlSteps] = {100, 190, 280, 360, 450, 550, 630, 700, 780};
-
 static bool s_capacityLearnedThisCycle = false;
 
 // Learn effective battery capacity (mAh) from a near-full-to-near-empty discharge
@@ -176,10 +172,110 @@ static void learnBatteryCapacityFromCycle() {
     s_capacityLearnedThisCycle = true;
 }
 
+static const int chargeControlSteps = 9;
+static const uint8_t chargeControlArray[chargeControlSteps] = {0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8};
+static const int chargeCurrentArray[chargeControlSteps] = {100, 190, 280, 360, 450, 550, 630, 700, 780};
 
-// Define Functions
-void power_onLoop();
-void doPowerManagement();
+static void setChargeCurrentBymA(int target_mA) {
+    int bestIdx  = 0;
+    int bestDiff = 9999;
+    for (int i = 0; i < chargeControlSteps; ++i) {
+        int diff = abs(chargeCurrentArray[i] - target_mA);
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestIdx  = i;
+        }
+    }
+
+    uint8_t reg = chargeControlArray[bestIdx];
+    if (reg != axpRead8bit(0x33)) {
+        axpWrite1Byte(0x33, reg);
+    }
+}
+
+int getChargeCurrent() {
+  const uint8_t chargeControlNow = axpRead8bit(0x33);
+  for (int i = 0; i < chargeControlSteps; i++) {
+    if (chargeControlNow == chargeControlArray[i]) {
+      return chargeCurrentArray[i];
+    }
+  }
+  return -1; // should never get here
+}
+
+enum class PackClass : uint8_t {
+    Tiny,
+    Large
+};
+
+static PackClass classifyPack() {
+    uint16_t cap = g_config.device.batteryCapacityMah;
+    if (cap == 0) {
+        // Failsafe: assume large; your real config is usually the big pack
+        return PackClass::Large;
+    }
+    return (cap <= 500) ? PackClass::Tiny : PackClass::Large;
+}
+
+static void updateChargeCurrentTaper(float vAvg, float soc, bool isQuietTopOff) {
+    static int currentTarget_mA = 700;
+    static millisDelay md_changeDelay;
+    const uint32_t changeDelayMs = 15000;  // 15s stability required
+
+    if (!md_changeDelay.isRunning()) {
+        md_changeDelay.start(changeDelayMs);
+        // Force an initial write on first run so we start at a known value
+        setChargeCurrentBymA(currentTarget_mA);
+    }
+
+    int newTarget_mA = currentTarget_mA;
+
+    if (isQuietTopOff) {
+        // Device dim / charge-to-off: let AXP do gentle finish
+        newTarget_mA = 100;  // uses chargeControlArray entry 0xc0
+    } else {
+        PackClass pack = classifyPack();
+
+        if (pack == PackClass::Large) {
+            // ~2200 + internal: 780 / 630 / 450 / 280 mA
+            if (soc < 30.0f || vAvg < 3.80f) {
+                newTarget_mA = 780;
+            } else if (soc < 70.0f || vAvg < 3.95f) {
+                newTarget_mA = 700;  // or 630 if you want slightly cooler
+            } else if (soc < 90.0f || vAvg < 4.05f) {
+                newTarget_mA = 550;  // medium
+            } else if (soc < 98.0f || vAvg < 4.17f) {
+                newTarget_mA = 280;  // gentle but still > load
+            } else {
+                newTarget_mA = 280;  // stay here; no 100 mA while in active use
+            }
+        } else {
+            // Tiny pack: keep things more modest, but still above load
+            if (soc < 50.0f || vAvg < 3.90f) {
+                newTarget_mA = 280;
+            } else if (soc < 90.0f || vAvg < 4.05f) {
+                newTarget_mA = 190;
+            } else {
+                newTarget_mA = 190;
+            }
+        }
+    }
+
+    // Simple hysteresis: don't bump current UP if we're already near full voltage
+    bool wantsHigherCurrent = (newTarget_mA > currentTarget_mA);
+    if (wantsHigherCurrent && vAvg > 3.90f && !isQuietTopOff) {
+        newTarget_mA = currentTarget_mA;
+    }
+
+    // Time debounce to avoid flapping
+    if (newTarget_mA != currentTarget_mA) {
+        if (md_changeDelay.justFinished()) {
+            currentTarget_mA = newTarget_mA;
+            setChargeCurrentBymA(currentTarget_mA);
+            md_changeDelay.restart();
+        }
+    }
+}
 
 
 // Function to estimate battery percentage with a non-linear discharge curve
@@ -273,39 +369,12 @@ float getBatPercentageHybrid() {
     return socV * (1.0f - alpha) + socC * alpha;
 }
 
-int getChargeCurrent() {
-  const uint8_t chargeControlNow = axpRead8bit(0x33);
-  for (int i = 0; i < chargeControlSteps; i++) {
-    if (chargeControlNow == chargeControlArray[i]) {
-      return chargeCurrentArray[i];
-    }
-  }
-  return -1; // should never get here
-}
-
-
-void power_setup() {
-  axpEnableCoulombcounter();
-  doPowerManagement();
-  ravg_batVoltage.fillValue(M5.Power.Axp192.getBatteryVoltage(), runningAvgCnt);
-  md_power.start(md_power_milliseconds);
-}
-
-
-void power_onLoop() {
-  if (md_power.justFinished()) {
-      md_power.repeat();
-      doPowerManagement();
-  }
-}
-
 
 void doPowerManagement() {
 
   const int md_chargeToOff_milliseconds = 60000;
   static millisDelay md_chargeToOff;
   static millisDelay md_lowBattery;
-  u_int16_t g_batteryCapacity = g_config.device.batteryCapacityMah;
   const uint8_t g_powersaverBrightness = g_config.global.powersaverBrightness;
   const uint8_t g_powersaverBatteryPct = g_config.global.powersaverBatteryPct;
 
@@ -340,8 +409,6 @@ void doPowerManagement() {
   pwr.batChargeCurrent = charge_mA;
   pwr.batCurrent       = charge_mA - discharge_mA;  // positive = net charging
 
-  pwr.maxChargeCurrent = getChargeCurrent();
-
   pwr.vbusVoltage = M5.Power.Axp192.getVBUSVoltage();
   pwr.vbusCurrent = M5.Power.Axp192.getVBUSCurrent();
 
@@ -358,40 +425,26 @@ void doPowerManagement() {
 
 
   // Power Mode
-  if (pwr.vinVoltage > 3.8) {         // 5v IN Charge
+  if (pwr.vinVoltage > 3.8f) {         // 5v IN Charge
     
     pwr.maxBrightness = 100;
-    
-    /*if (pwr.batPercentageMax < 70 && pwr.maxChargeCurrent < 780) {
-      setChargeCurrent(780);
-    } else if (pwr.batPercentageMax < 75 && pwr.maxChargeCurrent < 700) {
-      setChargeCurrent(700);
-    } else if (pwr.batPercentageMax < 80 && pwr.maxChargeCurrent < 630) {
-      setChargeCurrent(630);
-    } else if (pwr.batPercentageMax < 85 && pwr.maxChargeCurrent < 550) {
-      setChargeCurrent(550);
-    } else if (pwr.batPercentageMax < 90 && pwr.maxChargeCurrent < 450) {
-      setChargeCurrent(450);
-    } else if (pwr.batPercentageMax < 95 && pwr.maxChargeCurrent < 360) {
-      setChargeCurrent(360);
-    } else if (pwr.maxChargeCurrent != 280) {
-      setChargeCurrent(280);
-    }*/
 
-    if (pwr.maxChargeCurrent != 780) {
-      axpWrite1Byte(0x33, 0xc8);
-    }
-
+    float vAvg = ravg_batVoltage.getFastAverage();
+    float soc  = pwr.batPercentage;  // or hybrid
     
     if (currentBrightness > 20) {
 
-      const char* mode = "5v Charge";
-      snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
-      md_chargeToOff.stop();
+        // ACTIVE USE
+        updateChargeCurrentTaper(vAvg, soc, false);
+
+        const char* mode = "5v Charge";
+        snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
+        md_chargeToOff.stop();
 
     } else {
-                 
-      // Charge to Off
+
+        // CHARGE-TO-OFF: dim + gentle top-off + your shutdown timer
+        updateChargeCurrentTaper(vAvg, soc, true);
       
       if (md_chargeToOff.justFinished()) {
         axpClearCoulombcounter();   // 0 mAh == 100%
@@ -415,6 +468,7 @@ void doPowerManagement() {
       }
 
     }
+
 
   } else if (pwr.vbusVoltage > 3.8) {   // 5v USB Charge
 
@@ -462,6 +516,8 @@ void doPowerManagement() {
 
   }
 
+  pwr.maxChargeCurrent = getChargeCurrent();
+
   #ifdef DEBUG_POWER
   logf(
       LogLevel::Debug,
@@ -480,4 +536,20 @@ void doPowerManagement() {
       pwr.maxBrightness
   );
   #endif
+}
+
+
+void power_setup() {
+  axpEnableCoulombcounter();
+  doPowerManagement();
+  ravg_batVoltage.fillValue(M5.Power.Axp192.getBatteryVoltage(), runningAvgCnt);
+  md_power.start(md_power_milliseconds);
+}
+
+
+void power_onLoop() {
+  if (md_power.justFinished()) {
+      md_power.repeat();
+      doPowerManagement();
+  }
 }

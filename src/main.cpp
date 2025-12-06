@@ -43,6 +43,8 @@ MqttCommand g_pendingCommand;  // global or static
 
 // Example status snapshot builder
 StatusSnapshot buildStatusSnapshot() {
+    auto eff = g_config.effective();
+    
     StatusSnapshot st;
     st.uptimeSec = (millis() - g_bootMillis) / 1000;
     st.batteryMv  = static_cast<uint16_t>(pwr.batVoltage * 1000.0f);
@@ -56,6 +58,7 @@ StatusSnapshot buildStatusSnapshot() {
     st.rssi       = static_cast<int8_t>(WiFi.RSSI());
     st.temperatureC = pwr.tempInAXP192;
     st.firmwareVersion = F("2.0.0-mqtt");
+    st.buildDateTime   = eff.buildDateTime;
     st.hwRevision      = F("M5StickC-Plus");
     return st;
 }
@@ -167,6 +170,9 @@ void setup () {
         ms_tps.start(1000);
         ms_runningAvg.start(60000);
     #endif
+
+    auto eff = g_config.effective();
+    Serial.printf("BUILD_DATETIME from config: '%s'\n", eff.buildDateTime.c_str());
     
 }
 

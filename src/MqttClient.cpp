@@ -19,9 +19,6 @@ static const char* TOPIC_ALL_CMD            = "sanctuary/tally/all/cmd";
 static const char* AVAILABILITY_SUBTOPIC = "availability";
 static const char* STATUS_ROOT_SUBTOPIC  = "status";
 
-static const char* MQTT_USERNAME = "worship";   //temp
-static const char* MQTT_PASSWORD = "Owasso13";  //temp
-
 static const uint32_t RECONNECT_INTERVAL_MS = 5000;
 
 // We’ll use this static pointer so PubSubClient can call back into the instance
@@ -149,6 +146,9 @@ void MqttClient::publishStatus(const StatusSnapshot& st)
     pub("restarts", String(st.restartCount));
     if (st.firmwareVersion.length()) {
         pub("firmware_version", st.firmwareVersion);
+    }
+    if (st.buildDateTime.length()) {
+        pub("buildDateTime", st.buildDateTime);
     }
     if (st.hwRevision.length()) {
         pub("hw_revision", st.hwRevision);
