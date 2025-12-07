@@ -230,34 +230,34 @@ static void updateChargeCurrentTaper(float vAvg, float soc, bool isQuietTopOff) 
 
     int newTarget_mA = currentTarget_mA;
 
-    if (isQuietTopOff) {
-        // Device dim / charge-to-off: let AXP do gentle finish
-        newTarget_mA = 100;  // uses chargeControlArray entry 0xc0
-    } else {
-        PackClass pack = classifyPack();
+    // Use the same taper curve for both normal 5V charging and charge-to-off.
+    // isQuietTopOff is currently ignored so that both paths share identical
+    // behavior. We keep the parameter for future tuning if needed.
+    (void)isQuietTopOff;
 
-        if (pack == PackClass::Large) {
-            // ~2200 + internal: 780 / 630 / 450 / 280 mA
-            if (soc < 30.0f || vAvg < 3.80f) {
-                newTarget_mA = 780;
-            } else if (soc < 70.0f || vAvg < 3.95f) {
-                newTarget_mA = 700;  // or 630 if you want slightly cooler
-            } else if (soc < 90.0f || vAvg < 4.05f) {
-                newTarget_mA = 550;  // medium
-            } else if (soc < 98.0f || vAvg < 4.17f) {
-                newTarget_mA = 280;  // gentle but still > load
-            } else {
-                newTarget_mA = 280;  // stay here; no 100 mA while in active use
-            }
+    PackClass pack = classifyPack();
+
+    if (pack == PackClass::Large) {
+        // ~2200 + internal: 780 / 630 / 450 / 280 mA
+        if (soc < 30.0f || vAvg < 3.80f) {
+            newTarget_mA = 780;
+        } else if (soc < 70.0f || vAvg < 3.95f) {
+            newTarget_mA = 700;  // or 630 if you want slightly cooler
+        } else if (soc < 90.0f || vAvg < 4.05f) {
+            newTarget_mA = 550;  // medium
+        } else if (soc < 98.0f || vAvg < 4.17f) {
+            newTarget_mA = 280;  // gentle but still > load
         } else {
-            // Tiny pack: keep things more modest, but still above load
-            if (soc < 50.0f || vAvg < 3.90f) {
-                newTarget_mA = 280;
-            } else if (soc < 90.0f || vAvg < 4.05f) {
-                newTarget_mA = 190;
-            } else {
-                newTarget_mA = 190;
-            }
+            newTarget_mA = 280;  // stay here near full
+        }
+    } else {
+        // Tiny pack: keep things more modest, but still above load
+        if (soc < 50.0f || vAvg < 3.90f) {
+            newTarget_mA = 280;
+        } else if (soc < 90.0f || vAvg < 4.05f) {
+            newTarget_mA = 190;
+        } else {
+            newTarget_mA = 190;
         }
     }
 
@@ -432,7 +432,7 @@ void doPowerManagement() {
     float vAvg = ravg_batVoltage.getFastAverage();
     float soc  = pwr.batPercentage;  // or hybrid
     
-    if (currentBrightness > 20) {
+    if (currentBrightness > 30) {
 
         // ACTIVE USE
         updateChargeCurrentTaper(vAvg, soc, false);
