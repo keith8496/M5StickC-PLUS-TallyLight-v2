@@ -21,6 +21,8 @@ const int maxScreen = SCREEN_SETUP;
 // Logical brightness in the 0–100 range.
 // This is what MQTT / prefs / power mgmt all agree on.
 int currentBrightness = 50;     // default to 50%
+static const int minBrightness = 30;
+
 
 const int tft_width = 240;
 const int tft_heigth = 135;
@@ -168,7 +170,7 @@ void refreshTallyScreen() {
     }
 
     // Battery (top-right): horizontal icon with SoC inside
-    float soc = pwr.batPercentage;
+    float soc = pwr.batPercentageHybrid;
     if (soc < 0.0f) soc = 0.0f;
     if (soc > 100.0f) soc = 100.0f;
 
@@ -580,7 +582,6 @@ void refreshScreen() {
 }
 
 
-static const int minBrightness = 30;
 void setBrightness(int newBrightness) {
     if (newBrightness < minBrightness) {
         newBrightness = minBrightness;
