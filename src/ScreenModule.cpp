@@ -426,7 +426,7 @@ void refreshPowerScreen() {
     powerScreen.printf("APS:\r\n  V: %.3fv\r\n", pwr.apsVoltage);
     powerScreen.printf("AXP:\r\n  Temp: %.1fc", pwr.tempInAXP192);
 
-    powerScreen.pushSprite(10,10);
+    powerScreen.pushSprite(5,10);
 
 }
 
