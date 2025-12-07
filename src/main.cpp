@@ -47,8 +47,10 @@ MqttCommand g_pendingCommand;  // global or static
 static int g_displayRotation = 1;
 
 // Idle dimming state
-static uint32_t g_lastActivityMs  = 0;
-static bool     g_isIdleDimmed    = false;
+static uint32_t g_lastActivityMs   = 0;
+static bool     g_isIdleDimmed     = false;
+// Remember the brightness we had before we dimmed for idle
+static int      g_preDimBrightness = -1;
 
 // Forward declarations
 static void markUserActivity(const EffectiveConfig& eff);
@@ -81,14 +83,20 @@ StatusSnapshot buildStatusSnapshot() {
 static void markUserActivity(const EffectiveConfig& eff)
 {
     g_lastActivityMs = millis();
+
     if (g_isIdleDimmed) {
-        // Restore to configured active brightness
-        uint8_t target = eff.brightness;
-        if (target != currentBrightness) {
+        // Prefer the brightness we had before idle dimming, fall back to config brightness.
+        int target = (g_preDimBrightness > 0) ? g_preDimBrightness
+                                              : eff.brightness;
+
+        // Only bump up if this is actually brighter than where we are now.
+        if (target > currentBrightness) {
             currentBrightness = target;
             setBrightness(currentBrightness);
         }
-        g_isIdleDimmed = false;
+
+        g_isIdleDimmed     = false;
+        g_preDimBrightness = -1;
     }
 }
 
@@ -435,12 +443,18 @@ void loop () {
             } else if (nowIdle - g_lastActivityMs > idleMs) {
                 uint8_t dimTarget = eff.powersaverBrightness;
 
-                // Only dim down; never brighten here
+                // Only dim down; never brighten here, and only if we're actually above the dim level.
                 if (dimTarget < currentBrightness) {
+                    // Remember what brightness we had before we dimmed.
+                    g_preDimBrightness = currentBrightness;
+
                     currentBrightness = dimTarget;
                     setBrightness(currentBrightness);
+
+                    g_isIdleDimmed = true;
                 }
-                g_isIdleDimmed = true;
+                // If dimTarget >= currentBrightness, we were already at or below the dim level.
+                // In that case we DON'T mark g_isIdleDimmed, so markUserActivity() won't bump us up.
             }
         }
     }
