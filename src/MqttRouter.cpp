@@ -172,6 +172,11 @@ static void handleGlobalConfig(ConfigState& cfg, const String& key, const String
         uint16_t v = static_cast<uint16_t>(payload.toInt());
         if (v == 0) v = DEFAULT_STATUS_INTERVAL_SEC;
         cfg.global.statusIntervalSec = v;
+    } else if (key == "idle_dim_seconds") {
+        int v = payload.toInt();
+        if (v < 0)   v = 0;
+        if (v > 65535) v = 65535;
+        cfg.global.idleDimSeconds = static_cast<uint16_t>(v);
     }
 
 
@@ -200,6 +205,11 @@ static void handleDeviceConfig(ConfigState& cfg, const String& key, const String
         if (v > 0 && v < 100000) {
             cfg.device.batteryCapacityMah = static_cast<uint16_t>(v);
         }
+    } else if (key == "idle_dim_seconds") {
+        int v = payload.toInt();
+        if (v < 0)      v = 0;
+        if (v > 65535)  v = 65535;
+        cfg.device.idleDimSecondsOverride = static_cast<uint16_t>(v);
     } else if (key == "log_level") {
         cfg.device.logLevel = parseLogLevel(payload);
     }

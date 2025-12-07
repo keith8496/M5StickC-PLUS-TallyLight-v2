@@ -4,7 +4,7 @@
 #include "ConfigState.h"
 
 constexpr size_t BAT_WARNING_LEVEL_MAX_LEN   = 16;
-constexpr size_t POWER_MODE_MAX_LEN   = 16;
+constexpr size_t POWER_MODE_MAX_LEN   = 20;
 
 struct power {
     char batWarningLevel[BAT_WARNING_LEVEL_MAX_LEN + 1] = "";

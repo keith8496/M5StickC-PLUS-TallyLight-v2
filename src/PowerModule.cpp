@@ -20,10 +20,10 @@ extern ConfigState g_config;
 
 power pwr;
 
-static const int md_power_milliseconds = 250;
+static const int md_power_milliseconds = 500;
 static millisDelay md_power;
 //static millisDelay md_chargeControlWait;
-static const int runningAvgCnt = 16;
+static const int runningAvgCnt = 8;
 static RunningAverage ravg_batVoltage(runningAvgCnt);
 
 // --- AXP192 helpers on top of M5Unified --------------------------------------
@@ -230,34 +230,34 @@ static void updateChargeCurrentTaper(float vAvg, float soc, bool isQuietTopOff) 
 
     int newTarget_mA = currentTarget_mA;
 
-    if (isQuietTopOff) {
-        // Device dim / charge-to-off: let AXP do gentle finish
-        newTarget_mA = 100;  // uses chargeControlArray entry 0xc0
-    } else {
-        PackClass pack = classifyPack();
+    // Use the same taper curve for both normal 5V charging and charge-to-off.
+    // isQuietTopOff is currently ignored so that both paths share identical
+    // behavior. We keep the parameter for future tuning if needed.
+    (void)isQuietTopOff;
 
-        if (pack == PackClass::Large) {
-            // ~2200 + internal: 780 / 630 / 450 / 280 mA
-            if (soc < 30.0f || vAvg < 3.80f) {
-                newTarget_mA = 780;
-            } else if (soc < 70.0f || vAvg < 3.95f) {
-                newTarget_mA = 700;  // or 630 if you want slightly cooler
-            } else if (soc < 90.0f || vAvg < 4.05f) {
-                newTarget_mA = 550;  // medium
-            } else if (soc < 98.0f || vAvg < 4.17f) {
-                newTarget_mA = 280;  // gentle but still > load
-            } else {
-                newTarget_mA = 280;  // stay here; no 100 mA while in active use
-            }
+    PackClass pack = classifyPack();
+
+    if (pack == PackClass::Large) {
+        // ~2200 + internal: 780 / 630 / 450 / 280 mA
+        if (soc < 30.0f || vAvg < 3.80f) {
+            newTarget_mA = 780;
+        } else if (soc < 70.0f || vAvg < 3.95f) {
+            newTarget_mA = 700;  // or 630 if you want slightly cooler
+        } else if (soc < 90.0f || vAvg < 4.05f) {
+            newTarget_mA = 550;  // medium
+        } else if (soc < 98.0f || vAvg < 4.17f) {
+            newTarget_mA = 280;  // gentle but still > load
         } else {
-            // Tiny pack: keep things more modest, but still above load
-            if (soc < 50.0f || vAvg < 3.90f) {
-                newTarget_mA = 280;
-            } else if (soc < 90.0f || vAvg < 4.05f) {
-                newTarget_mA = 190;
-            } else {
-                newTarget_mA = 190;
-            }
+            newTarget_mA = 280;  // stay here near full
+        }
+    } else {
+        // Tiny pack: keep things more modest, but still above load
+        if (soc < 50.0f || vAvg < 3.90f) {
+            newTarget_mA = 280;
+        } else if (soc < 90.0f || vAvg < 4.05f) {
+            newTarget_mA = 190;
+        } else {
+            newTarget_mA = 190;
         }
     }
 
@@ -303,7 +303,7 @@ float getBatPercentageVoltage(float voltage) {
     {3.40f,  15.0f},
     {3.34f,  10.0f},
     {3.28f,   5.0f},
-    {3.20f,   0.0f}
+    {3.00f,   0.0f}
   };
 
   if (voltage >= batLookup_v4[0][0]) {
@@ -432,7 +432,7 @@ void doPowerManagement() {
     float vAvg = ravg_batVoltage.getFastAverage();
     float soc  = pwr.batPercentage;  // or hybrid
     
-    if (currentBrightness > 20) {
+    if (currentBrightness > 30) {
 
         // ACTIVE USE
         updateChargeCurrentTaper(vAvg, soc, false);
@@ -456,15 +456,15 @@ void doPowerManagement() {
         md_chargeToOff.start(md_chargeToOff_milliseconds);
       }
       
+      // PowerModule.cpp
       if (md_chargeToOff.isRunning()) {
-        constexpr size_t POWER_MODE_MAX_LEN   = 20;
-        char powerMode[POWER_MODE_MAX_LEN];
-        const int md_chargeToOffRemaining = floor(md_chargeToOff.remaining() / 1000);
-        snprintf(powerMode, 20, "Charge to Off (%i)", md_chargeToOffRemaining);
-        snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", powerMode);
+          char powerMode[POWER_MODE_MAX_LEN + 1];
+          const int md_chargeToOffRemaining = floor(md_chargeToOff.remaining() / 1000);
+          snprintf(powerMode, sizeof(powerMode), "Charge to Off (%i)", md_chargeToOffRemaining);
+          snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", powerMode);
       } else {
-        const char* mode = "Charge to Off";
-        snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
+          const char* mode = "Charge to Off";
+          snprintf(pwr.powerMode, sizeof(pwr.powerMode), "%s", mode);
       }
 
     }

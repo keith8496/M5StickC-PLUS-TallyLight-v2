@@ -21,6 +21,8 @@ const int maxScreen = SCREEN_SETUP;
 // Logical brightness in the 0–100 range.
 // This is what MQTT / prefs / power mgmt all agree on.
 int currentBrightness = 50;     // default to 50%
+static const int minBrightness = 30;
+
 
 const int tft_width = 240;
 const int tft_heigth = 135;
@@ -168,7 +170,7 @@ void refreshTallyScreen() {
     }
 
     // Battery (top-right): horizontal icon with SoC inside
-    float soc = pwr.batPercentage;
+    float soc = pwr.batPercentageHybrid;
     if (soc < 0.0f) soc = 0.0f;
     if (soc > 100.0f) soc = 100.0f;
 
@@ -424,7 +426,7 @@ void refreshPowerScreen() {
     powerScreen.printf("APS:\r\n  V: %.3fv\r\n", pwr.apsVoltage);
     powerScreen.printf("AXP:\r\n  Temp: %.1fc", pwr.tempInAXP192);
 
-    powerScreen.pushSprite(10,10);
+    powerScreen.pushSprite(5,10);
 
 }
 
@@ -534,7 +536,7 @@ void changeScreen(int newScreen) {
             break; 
     }
 
-    md_screenRefresh.start(1000 / 30); // 30 fps
+    md_screenRefresh.start(1000 / 12); // ~12 fps to save power
 
 }
 
@@ -556,7 +558,7 @@ void toggleMainTab() {
 
 void refreshScreen() {
 
-    // Limit to 30 FPS
+    // Limit refresh rate (set in changeScreen, currently ~12 FPS)
     if(!md_screenRefresh.justFinished()) return;
     md_screenRefresh.repeat();
     
@@ -580,7 +582,6 @@ void refreshScreen() {
 }
 
 
-static const int minBrightness = 20;
 void setBrightness(int newBrightness) {
     if (newBrightness < minBrightness) {
         newBrightness = minBrightness;
